@@ -1,0 +1,6 @@
+{
+  "name": "Registro de Participantes",
+  "description": "Dashboard de registro de participantes, historial de eventos de capacitación y perfil de usuario.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
