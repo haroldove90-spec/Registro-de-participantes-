@@ -17,7 +17,7 @@ import { MetricasModule } from './components/Modules/MetricasModule';
 import { PerfilModule } from './components/Modules/PerfilModule';
 
 export default function App() {
-  const [activeModule, setActiveModule] = useState<ModuleType>('registro');
+  const [activeModule, setActiveModule] = useState<ModuleType>('metricas');
   const [eventos, setEventos] = useState<EventoData[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile>(getStoredUserProfile());
 

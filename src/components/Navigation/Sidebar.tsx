@@ -17,6 +17,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const navItems = [
     {
+      id: 'metricas' as ModuleType,
+      label: 'Módulo de Métricas',
+      shortLabel: 'Métricas',
+      description: 'Gráficas, KPIs e indicadores clave',
+      icon: BarChart3,
+      badge: 'KPIs',
+      badgeColor: 'bg-purple-100 text-purple-700',
+    },
+    {
       id: 'registro' as ModuleType,
       label: 'Registro de Participantes',
       shortLabel: 'Registro',
@@ -33,15 +42,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: History,
       count: totalEventosCount,
       badgeColor: 'bg-slate-100 text-slate-700',
-    },
-    {
-      id: 'metricas' as ModuleType,
-      label: 'Módulo de Métricas',
-      shortLabel: 'Métricas',
-      description: 'Gráficas, KPIs e indicadores clave',
-      icon: BarChart3,
-      badge: 'KPIs',
-      badgeColor: 'bg-purple-100 text-purple-700',
     },
     {
       id: 'perfil' as ModuleType,

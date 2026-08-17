@@ -85,4 +85,4 @@ export interface UserProfile {
   modoOscuro: boolean;
 }
 
-export type ModuleType = 'registro' | 'historial' | 'metricas' | 'perfil';
+export type ModuleType = 'metricas' | 'registro' | 'historial' | 'perfil';

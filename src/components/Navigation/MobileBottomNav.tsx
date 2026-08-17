@@ -15,6 +15,11 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 }) => {
   const navItems = [
     {
+      id: 'metricas' as ModuleType,
+      label: 'Métricas',
+      icon: BarChart3,
+    },
+    {
       id: 'registro' as ModuleType,
       label: 'Registro',
       icon: ClipboardList,
@@ -24,11 +29,6 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       label: 'Historial',
       icon: History,
       count: totalEventosCount,
-    },
-    {
-      id: 'metricas' as ModuleType,
-      label: 'Métricas',
-      icon: BarChart3,
     },
     {
       id: 'perfil' as ModuleType,
