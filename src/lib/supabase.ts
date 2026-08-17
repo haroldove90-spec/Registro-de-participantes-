@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { EventoData, Participant, UserProfile } from '../types';
+import { EventoData, Participant, UserProfile, UserRole } from '../types';
 
 // Supabase project credentials provided by the user
 export const SUPABASE_PROJECT_CONFIG = {
@@ -179,7 +179,6 @@ export async function fetchEventosFromSupabase(): Promise<EventoData[] | null> {
 
     if (eventosError) {
       if (isTableMissingError(eventosError)) {
-        // Table not created yet in Supabase SQL editor; return null gracefully
         return null;
       }
       console.warn('Supabase fetch eventos notice:', eventosError.message);
@@ -237,7 +236,6 @@ export async function upsertEventoToSupabase(evento: EventoData): Promise<boolea
 
     if (eventoError) {
       if (isTableMissingError(eventoError)) {
-        // Table not created yet; gracefully ignore
         return false;
       }
       console.warn('Supabase upsert evento notice:', eventoError.message);
@@ -298,22 +296,24 @@ export async function deleteEventoFromSupabase(id: string): Promise<boolean> {
 }
 
 /**
- * Fetches user profile from Supabase
+ * Fetches user profile from Supabase by email or ID
  */
-export async function fetchUserProfileFromSupabase(): Promise<UserProfile | null> {
+export async function fetchUserProfileFromSupabase(emailOrId?: string): Promise<UserProfile | null> {
   try {
-    const { data, error } = await supabase
-      .from('perfiles_usuario')
-      .select('*')
-      .eq('id', 'default_user')
-      .single();
+    let query = supabase.from('perfiles_usuario').select('*');
+
+    if (emailOrId && emailOrId.includes('@')) {
+      query = query.ilike('email', emailOrId);
+    } else if (emailOrId) {
+      query = query.eq('id', emailOrId);
+    } else {
+      query = query.limit(1);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       if (isTableMissingError(error)) {
-        return null;
-      }
-      // single() returns code PGRST116 when row not found
-      if (error.code === 'PGRST116') {
         return null;
       }
       console.warn('Supabase fetch profile notice:', error.message);
@@ -323,13 +323,14 @@ export async function fetchUserProfileFromSupabase(): Promise<UserProfile | null
     if (!data) return null;
 
     return {
+      id: data.id,
       nombre: data.nombre,
       email: data.email,
       puesto: data.puesto || '',
       departamento: data.departamento || '',
       rfc: data.rfc || '',
       telefono: data.telefono || '',
-      rol: data.rol || 'Administrador de Capacitación',
+      rol: data.rol || 'Coordinador de Capacitación',
       avatarUrl: data.avatar_url || '',
       fechaIngreso: data.fecha_ingreso || '',
       notificacionesEmail: data.notificaciones_email ?? true,
@@ -344,13 +345,49 @@ export async function fetchUserProfileFromSupabase(): Promise<UserProfile | null
 }
 
 /**
- * Saves user profile to Supabase
+ * Fetches all registered users from Supabase (for Role management)
+ */
+export async function fetchAllUsersFromSupabase(): Promise<UserProfile[]> {
+  try {
+    const { data, error } = await supabase
+      .from('perfiles_usuario')
+      .select('*')
+      .order('nombre', { ascending: true });
+
+    if (error) {
+      if (isTableMissingError(error)) return [];
+      console.warn('Error fetching all users:', error.message);
+      return [];
+    }
+
+    if (!data) return [];
+
+    return data.map((item: any) => ({
+      id: item.id,
+      nombre: item.nombre,
+      email: item.email,
+      puesto: item.puesto || '',
+      departamento: item.departamento || '',
+      rfc: item.rfc || '',
+      telefono: item.telefono || '',
+      rol: item.rol || 'Coordinador de Capacitación',
+      avatarUrl: item.avatar_url || '',
+      fechaIngreso: item.fecha_ingreso || '',
+      notificacionesEmail: item.notificaciones_email ?? true,
+      modoOscuro: item.modo_oscuro ?? false,
+    }));
+  } catch (err) {
+    return [];
+  }
+}
+
+/**
+ * Saves or updates user profile in Supabase
  */
 export async function saveUserProfileToSupabase(profile: UserProfile): Promise<boolean> {
   try {
     const { error } = await supabase.from('perfiles_usuario').upsert(
       {
-        id: 'default_user',
         nombre: profile.nombre,
         email: profile.email,
         puesto: profile.puesto,
@@ -363,12 +400,11 @@ export async function saveUserProfileToSupabase(profile: UserProfile): Promise<b
         notificaciones_email: profile.notificacionesEmail,
         modo_oscuro: profile.modoOscuro,
       },
-      { onConflict: 'id' }
+      { onConflict: 'email' }
     );
 
     if (error) {
       if (isTableMissingError(error)) {
-        // Table not created yet in Supabase SQL editor; return false cleanly without spamming console
         return false;
       }
       console.warn('Supabase save profile notice:', error.message);
@@ -380,5 +416,193 @@ export async function saveUserProfileToSupabase(profile: UserProfile): Promise<b
       console.warn('Notice in saveUserProfileToSupabase:', err?.message || err);
     }
     return false;
+  }
+}
+
+/**
+ * Updates a user role in Supabase
+ */
+export async function updateUserRoleInSupabase(
+  email: string,
+  newRole: UserRole
+): Promise<{ success: boolean; message: string }> {
+  try {
+    // Try RPC function first
+    const { data: rpcData, error: rpcError } = await supabase.rpc('cambiar_rol_usuario', {
+      target_email: email,
+      nuevo_rol: newRole,
+    });
+
+    if (!rpcError && rpcData) {
+      return { success: true, message: `Rol actualizado a ${newRole} exitosamente.` };
+    }
+
+    // Fallback: Direct Table update
+    const { error: tableError } = await supabase
+      .from('perfiles_usuario')
+      .update({ rol: newRole })
+      .ilike('email', email);
+
+    if (tableError) {
+      if (isTableMissingError(tableError)) {
+        return {
+          success: false,
+          message: 'La tabla perfiles_usuario no existe en Supabase aún. Ejecuta el script SQL en el SQL Editor.',
+        };
+      }
+      return { success: false, message: tableError.message };
+    }
+
+    return { success: true, message: `Rol de ${email} actualizado a ${newRole}.` };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Error al actualizar el rol en Supabase.' };
+  }
+}
+
+/**
+ * Sign In with Supabase Auth
+ */
+export async function signInWithSupabase(
+  email: string,
+  password: string
+): Promise<{
+  success: boolean;
+  user?: UserProfile;
+  error?: string;
+}> {
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    if (!data.user) {
+      return { success: false, error: 'No se obtuvo usuario tras autenticación.' };
+    }
+
+    // Fetch user profile from perfiles_usuario
+    const remoteProfile = await fetchUserProfileFromSupabase(data.user.email);
+
+    const userProfile: UserProfile = remoteProfile || {
+      id: data.user.id,
+      nombre: (data.user.user_metadata?.nombre as string) || data.user.email?.split('@')[0] || 'Usuario',
+      email: data.user.email || email,
+      puesto: (data.user.user_metadata?.puesto as string) || 'Colaborador',
+      departamento: (data.user.user_metadata?.departamento as string) || 'General',
+      rfc: (data.user.user_metadata?.rfc as string) || 'XAXX010101000',
+      telefono: (data.user.user_metadata?.telefono as string) || '',
+      rol: (data.user.user_metadata?.rol as UserRole) || 'Coordinador de Capacitación',
+      avatarUrl:
+        (data.user.user_metadata?.avatarUrl as string) ||
+        'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
+      fechaIngreso: new Date().toISOString().split('T')[0],
+      notificacionesEmail: true,
+      modoOscuro: false,
+    };
+
+    return {
+      success: true,
+      user: userProfile,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Error inesperado durante el inicio de sesión.',
+    };
+  }
+}
+
+/**
+ * Sign Up with Supabase Auth
+ */
+export async function signUpWithSupabase(
+  email: string,
+  password: string,
+  profileData: {
+    nombre: string;
+    puesto?: string;
+    departamento?: string;
+    rfc?: string;
+    telefono?: string;
+    rol?: UserRole;
+    avatarUrl?: string;
+  }
+): Promise<{
+  success: boolean;
+  user?: UserProfile;
+  needsEmailConfirmation?: boolean;
+  error?: string;
+}> {
+  try {
+    const formattedEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase.auth.signUp({
+      email: formattedEmail,
+      password,
+      options: {
+        data: {
+          nombre: profileData.nombre,
+          puesto: profileData.puesto || 'Colaborador',
+          departamento: profileData.departamento || 'General',
+          rfc: profileData.rfc || 'XAXX010101000',
+          telefono: profileData.telefono || '',
+          rol: profileData.rol || 'Coordinador de Capacitación',
+          avatarUrl:
+            profileData.avatarUrl ||
+            'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
+        },
+      },
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const newUser: UserProfile = {
+      id: data.user?.id,
+      nombre: profileData.nombre,
+      email: formattedEmail,
+      puesto: profileData.puesto || 'Colaborador',
+      departamento: profileData.departamento || 'General',
+      rfc: profileData.rfc || 'XAXX010101000',
+      telefono: profileData.telefono || '',
+      rol: profileData.rol || 'Coordinador de Capacitación',
+      avatarUrl:
+        profileData.avatarUrl ||
+        'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
+      fechaIngreso: new Date().toISOString().split('T')[0],
+      notificacionesEmail: true,
+      modoOscuro: false,
+    };
+
+    // Try saving directly to perfiles_usuario table as well
+    await saveUserProfileToSupabase(newUser).catch(() => {});
+
+    const needsEmailConfirmation = !data.session && !!data.user;
+
+    return {
+      success: true,
+      user: newUser,
+      needsEmailConfirmation,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Error inesperado durante el registro.',
+    };
+  }
+}
+
+/**
+ * Sign Out from Supabase Auth
+ */
+export async function signOutFromSupabase(): Promise<void> {
+  try {
+    await supabase.auth.signOut();
+  } catch (err) {
+    console.warn('Error signing out from Supabase:', err);
   }
 }

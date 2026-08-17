@@ -22,6 +22,9 @@ import {
   Database,
   Code2,
   Layers,
+  LogIn,
+  Users,
+  Shield,
 } from 'lucide-react';
 import { SUPABASE_PROJECT_CONFIG } from '../../lib/supabase';
 
@@ -29,13 +32,16 @@ interface PerfilModuleProps {
   userProfile: UserProfile;
   onSaveProfile: (updatedProfile: UserProfile) => void;
   onOpenSupabaseModal?: () => void;
+  onOpenAuthModal?: () => void;
 }
 
 export const PerfilModule: React.FC<PerfilModuleProps> = ({
   userProfile,
   onSaveProfile,
   onOpenSupabaseModal,
+  onOpenAuthModal,
 }) => {
+
 
   // Form State
   const [nombre, setNombre] = useState(userProfile.nombre);
@@ -179,14 +185,28 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
           <p className="text-xs text-slate-400">{departamento} • {email}</p>
         </div>
 
-        {/* Security Password Shortcut Button */}
-        <button
-          onClick={() => setShowPasswordModal(true)}
-          className="self-center sm:self-start px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-semibold text-white transition-all flex items-center gap-1.5 backdrop-blur-md shrink-0"
-        >
-          <KeyRound className="w-4 h-4 text-amber-300" /> Cambiar Contraseña
-        </button>
+        {/* Header Action Buttons */}
+        <div className="flex flex-col sm:flex-row gap-2 self-center sm:self-start shrink-0">
+          {onOpenAuthModal && (
+            <button
+              type="button"
+              onClick={onOpenAuthModal}
+              className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition-all flex items-center justify-center gap-1.5 shadow-md"
+            >
+              <LogIn className="w-4 h-4" /> Cambiar Cuenta
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowPasswordModal(true)}
+            className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-semibold text-white transition-all flex items-center justify-center gap-1.5 backdrop-blur-md"
+          >
+            <KeyRound className="w-4 h-4 text-amber-300" /> Contraseña
+          </button>
+        </div>
       </div>
+
 
       {/* Save Success Banner */}
       {saveSuccess && (

@@ -7,6 +7,8 @@ import {
   deleteEvento,
   getStoredUserProfile,
   saveStoredUserProfile,
+  getStoredAuthSession,
+  saveStoredAuthSession,
   initializeSupabaseSync,
 } from './utils/storage';
 import { Sidebar } from './components/Navigation/Sidebar';
@@ -17,12 +19,17 @@ import { HistorialModule } from './components/Modules/HistorialModule';
 import { MetricasModule } from './components/Modules/MetricasModule';
 import { PerfilModule } from './components/Modules/PerfilModule';
 import { SupabaseModal } from './components/SupabaseModal';
+import { AuthModal } from './components/Auth/AuthModal';
 
 export default function App() {
   const [activeModule, setActiveModule] = useState<ModuleType>('metricas');
   const [eventos, setEventos] = useState<EventoData[]>([]);
-  const [userProfile, setUserProfile] = useState<UserProfile>(getStoredUserProfile());
+  const [userProfile, setUserProfile] = useState<UserProfile>(() => {
+    const session = getStoredAuthSession();
+    return session?.user || getStoredUserProfile();
+  });
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   // Load initial eventos from storage and synchronize with Supabase Cloud
   useEffect(() => {
@@ -56,7 +63,16 @@ export default function App() {
 
   const handleSaveProfile = (updatedProfile: UserProfile) => {
     saveStoredUserProfile(updatedProfile);
+    saveStoredAuthSession({
+      user: updatedProfile,
+      isSupabaseAuth: true,
+      lastLogin: new Date().toISOString(),
+    });
     setUserProfile(updatedProfile);
+  };
+
+  const handleLoginSuccess = (authenticatedUser: UserProfile) => {
+    handleSaveProfile(authenticatedUser);
   };
 
   return (
@@ -77,6 +93,7 @@ export default function App() {
           setActiveModule={setActiveModule}
           userProfile={userProfile}
           onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
+          onOpenAuthModal={() => setIsAuthModalOpen(true)}
         />
 
         {/* Dynamic Module Body */}
@@ -106,6 +123,7 @@ export default function App() {
               userProfile={userProfile}
               onSaveProfile={handleSaveProfile}
               onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
             />
           )}
         </main>
@@ -118,7 +136,7 @@ export default function App() {
         totalEventosCount={eventos.length}
       />
 
-      {/* Supabase Configuration and SQL Modal */}
+      {/* Supabase Configuration, SQL and Role Management Modal */}
       <SupabaseModal
         isOpen={isSupabaseModalOpen}
         onClose={() => setIsSupabaseModalOpen(false)}
@@ -127,7 +145,16 @@ export default function App() {
           setUserProfile(syncedProfile);
         }}
       />
+
+      {/* Access Login & Registration Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onLoginSuccess={handleLoginSuccess}
+        currentEmail={userProfile.email}
+      />
     </div>
   );
 }
+
 

@@ -11,13 +11,20 @@ import {
   Terminal,
   Shield,
   Layers,
+  Users,
+  ShieldAlert,
+  Code2,
+  Sparkles,
+  Key,
 } from 'lucide-react';
 import {
   SUPABASE_PROJECT_CONFIG,
   testSupabaseConnection,
+  updateUserRoleInSupabase,
+  fetchAllUsersFromSupabase,
 } from '../lib/supabase';
 import { initializeSupabaseSync } from '../utils/storage';
-import { EventoData, UserProfile } from '../types';
+import { EventoData, UserProfile, UserRole } from '../types';
 
 interface SupabaseModalProps {
   isOpen: boolean;
@@ -25,12 +32,23 @@ interface SupabaseModalProps {
   onDataSynced?: (eventos: EventoData[], profile: UserProfile) => void;
 }
 
+const ROLES_LIST: UserRole[] = [
+  'Administrador de Capacitación',
+  'Coordinador de Capacitación',
+  'Instructor / Capacitador',
+  'Recursos Humanos (RH)',
+  'Participante / Empleado',
+  'Auditor / Consulta',
+];
+
 export const SupabaseModal: React.FC<SupabaseModalProps> = ({
   isOpen,
   onClose,
   onDataSynced,
 }) => {
-  const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<'schema' | 'roles'>('roles');
+  const [copiedSchema, setCopiedSchema] = useState(false);
+  const [copiedRoleSql, setCopiedRoleSql] = useState(false);
   const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<{
@@ -40,6 +58,20 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
     message?: string;
   }>({ tested: false });
 
+  // Role Generator State
+  const [targetEmail, setTargetEmail] = useState(
+    'registrodeparticipantes@appdesignsoftware.com'
+  );
+  const [selectedRole, setSelectedRole] = useState<UserRole>(
+    'Administrador de Capacitación'
+  );
+  const [roleUpdateMsg, setRoleUpdateMsg] = useState<{
+    success?: boolean;
+    text?: string;
+  } | null>(null);
+  const [updatingRole, setUpdatingRole] = useState(false);
+
+  // Full SQL script state
   const [sqlContent, setSqlContent] = useState<string>('');
 
   useEffect(() => {
@@ -115,16 +147,26 @@ CREATE TABLE IF NOT EXISTS public.participantes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 4. TABLA DE PERFILES DE USUARIO
+-- 4. TABLA DE PERFILES DE USUARIO Y ROLES
 CREATE TABLE IF NOT EXISTS public.perfiles_usuario (
-    id TEXT PRIMARY KEY DEFAULT 'default_user',
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     nombre TEXT NOT NULL,
-    email TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
     puesto TEXT DEFAULT '',
     departamento TEXT DEFAULT '',
     rfc TEXT DEFAULT '',
     telefono TEXT DEFAULT '',
-    rol TEXT DEFAULT 'Administrador de Capacitación',
+    rol TEXT NOT NULL DEFAULT 'Coordinador de Capacitación' CHECK (
+        rol IN (
+            'Administrador de Capacitación',
+            'Coordinador de Capacitación',
+            'Instructor / Capacitador',
+            'Recursos Humanos (RH)',
+            'Participante / Empleado',
+            'Auditor / Consulta'
+        )
+    ),
     avatar_url TEXT DEFAULT '',
     fecha_ingreso DATE DEFAULT CURRENT_DATE,
     notificaciones_email BOOLEAN DEFAULT true,
@@ -133,12 +175,12 @@ CREATE TABLE IF NOT EXISTS public.perfiles_usuario (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 5. ÍNDICES DE RENDIMIENTO Y CONSULTA RÁPIDA
+-- 5. ÍNDICES DE RENDIMIENTO
 CREATE INDEX IF NOT EXISTS idx_participantes_evento_id ON public.participantes(evento_id);
 CREATE INDEX IF NOT EXISTS idx_participantes_pos ON public.participantes(evento_id, pos);
 CREATE INDEX IF NOT EXISTS idx_eventos_fecha_inicio ON public.eventos(fecha_inicio DESC);
 CREATE INDEX IF NOT EXISTS idx_eventos_tipo_evento ON public.eventos(tipo_evento);
-CREATE INDEX IF NOT EXISTS idx_eventos_modalidad ON public.eventos(ubicacion_modalidad);
+CREATE INDEX IF NOT EXISTS idx_perfiles_email ON public.perfiles_usuario(email);
 
 -- 6. HABILITAR ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.eventos ENABLE ROW LEVEL SECURITY;
@@ -186,19 +228,67 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS tr_eventos_updated_at ON public.eventos;
-CREATE TRIGGER tr_eventos_updated_at
-    BEFORE UPDATE ON public.eventos
-    FOR EACH ROW
-    EXECUTE FUNCTION public.handle_updated_at();
+CREATE TRIGGER tr_eventos_updated_at BEFORE UPDATE ON public.eventos FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
 DROP TRIGGER IF EXISTS tr_perfiles_updated_at ON public.perfiles_usuario;
-CREATE TRIGGER tr_perfiles_updated_at
-    BEFORE UPDATE ON public.perfiles_usuario
-    FOR EACH ROW
-    EXECUTE FUNCTION public.handle_updated_at();
+CREATE TRIGGER tr_perfiles_updated_at BEFORE UPDATE ON public.perfiles_usuario FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
--- 9. INSERTAR PERFIL INICIAL POR DEFECTO
-INSERT INTO public.perfiles_usuario (id, nombre, email, puesto, departamento, rfc, telefono, rol, avatar_url, notificaciones_email, modo_oscuro)
+-- 9. TRIGGER PARA REGISTRO AUTOMÁTICO EN PERFILES AL CREAR USUARIO EN AUTH
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.perfiles_usuario (id, user_id, nombre, email, puesto, departamento, rfc, telefono, rol, avatar_url, fecha_ingreso)
+    VALUES (
+        NEW.id::text,
+        NEW.id,
+        COALESCE(NEW.raw_user_meta_data->>'nombre', split_part(NEW.email, '@', 1)),
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'puesto', 'Colaborador'),
+        COALESCE(NEW.raw_user_meta_data->>'departamento', 'General'),
+        COALESCE(NEW.raw_user_meta_data->>'rfc', 'XAXX010101000'),
+        COALESCE(NEW.raw_user_meta_data->>'telefono', ''),
+        COALESCE(NEW.raw_user_meta_data->>'rol', 'Coordinador de Capacitación'),
+        COALESCE(NEW.raw_user_meta_data->>'avatar_url', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80'),
+        CURRENT_DATE
+    )
+    ON CONFLICT (email) DO UPDATE SET
+        user_id = EXCLUDED.user_id,
+        nombre = EXCLUDED.nombre,
+        updated_at = timezone('utc'::text, now());
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- 10. FUNCIÓN PARA CAMBIAR ROLES DE USUARIOS FÁCILMENTE
+CREATE OR REPLACE FUNCTION public.cambiar_rol_usuario(target_email TEXT, nuevo_rol TEXT)
+RETURNS JSON AS $$
+DECLARE
+    result_user public.perfiles_usuario%ROWTYPE;
+BEGIN
+    UPDATE public.perfiles_usuario
+    SET rol = nuevo_rol, updated_at = timezone('utc'::text, now())
+    WHERE LOWER(email) = LOWER(target_email)
+    RETURNING * INTO result_user;
+
+    IF NOT FOUND THEN
+        INSERT INTO public.perfiles_usuario (id, nombre, email, rol)
+        VALUES (gen_random_uuid()::text, split_part(target_email, '@', 1), target_email, nuevo_rol)
+        RETURNING * INTO result_user;
+    END IF;
+
+    UPDATE auth.users
+    SET raw_user_meta_data = raw_user_meta_data || jsonb_build_object('rol', nuevo_rol)
+    WHERE LOWER(email) = LOWER(target_email);
+
+    RETURN json_build_object('success', true, 'email', result_user.email, 'nuevo_rol', result_user.rol);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 11. USUARIO INICIAL POR DEFECTO
+INSERT INTO public.perfiles_usuario (id, nombre, email, puesto, departamento, rfc, telefono, rol, avatar_url)
 VALUES (
     'default_user',
     'Lic. Ana Gabriela Mendoza',
@@ -208,21 +298,61 @@ VALUES (
     'MEGA890412HR4',
     '+52 (55) 8492-3021',
     'Administrador de Capacitación',
-    'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
-    true,
-    false
+    'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80'
 )
-ON CONFLICT (id) DO NOTHING;`;
+ON CONFLICT (email) DO NOTHING;`;
 
     setSqlContent(rawSql);
   }, []);
 
   if (!isOpen) return null;
 
-  const handleCopySql = () => {
+  const handleCopySchema = () => {
     navigator.clipboard.writeText(sqlContent);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    setCopiedSchema(true);
+    setTimeout(() => setCopiedSchema(false), 2500);
+  };
+
+  const dynamicRoleSql = `-- ==============================================================================
+-- SQL PARA CAMBIAR EL ROL DE UN USUARIO EN SUPABASE
+-- ==============================================================================
+
+-- Opción 1: Ejecutar la función almacenada (Recomendado):
+SELECT public.cambiar_rol_usuario('${targetEmail.trim()}', '${selectedRole}');
+
+-- Opción 2: Actualización directa por UPDATE:
+UPDATE public.perfiles_usuario
+SET rol = '${selectedRole}',
+    updated_at = timezone('utc'::text, now())
+WHERE LOWER(email) = LOWER('${targetEmail.trim()}');
+
+-- Opción 3: Actualizar también los metadatos de Auth (Opcional):
+UPDATE auth.users
+SET raw_user_meta_data = raw_user_meta_data || '{"rol": "${selectedRole}"}'::jsonb
+WHERE LOWER(email) = LOWER('${targetEmail.trim()}');
+
+-- Verificar el cambio de rol:
+SELECT email, nombre, puesto, rol, updated_at
+FROM public.perfiles_usuario
+WHERE LOWER(email) = LOWER('${targetEmail.trim()}');`;
+
+  const handleCopyRoleSql = () => {
+    navigator.clipboard.writeText(dynamicRoleSql);
+    setCopiedRoleSql(true);
+    setTimeout(() => setCopiedRoleSql(false), 2500);
+  };
+
+  const handleExecuteRoleChange = async () => {
+    if (!targetEmail) return;
+    setUpdatingRole(true);
+    setRoleUpdateMsg(null);
+
+    const res = await updateUserRoleInSupabase(targetEmail.trim(), selectedRole);
+    setRoleUpdateMsg({
+      success: res.success,
+      text: res.message,
+    });
+    setUpdatingRole(false);
   };
 
   const handleTestConnection = async () => {
@@ -251,7 +381,7 @@ ON CONFLICT (id) DO NOTHING;`;
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-6 animate-fade-in">
         {/* Header */}
-        <div className="bg-gradient-to-r from-emerald-900 via-teal-950 to-slate-950 p-6 text-white flex items-center justify-between">
+        <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-950 p-6 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300 shadow-inner">
               <Database className="w-6 h-6" />
@@ -259,12 +389,12 @@ ON CONFLICT (id) DO NOTHING;`;
             <div>
               <div className="flex items-center gap-2">
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 uppercase tracking-wide">
-                  Cloud Backend
+                  Supabase Cloud
                 </span>
                 <span className="text-xs text-slate-300">ID: {SUPABASE_PROJECT_CONFIG.projectId}</span>
               </div>
               <h2 className="text-xl font-bold text-white tracking-tight">
-                Configuración y SQL de Supabase
+                Consola Supabase: Esquema SQL y Gestión de Roles
               </h2>
             </div>
           </div>
@@ -277,135 +407,219 @@ ON CONFLICT (id) DO NOTHING;`;
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
-          {/* Project Credentials Card */}
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-              <Shield className="w-4 h-4 text-emerald-600" /> Parámetros del Proyecto Configurado
-            </h3>
+        {/* Tab Navigation */}
+        <div className="flex border-b border-slate-200 bg-slate-50 px-6 pt-3 gap-2">
+          <button
+            onClick={() => setActiveTab('roles')}
+            className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 border-b-2 ${
+              activeTab === 'roles'
+                ? 'bg-white text-blue-700 border-blue-600 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-800 border-transparent'
+            }`}
+          >
+            <Users className="w-4 h-4 text-blue-600" />
+            <span>SQL para Cambiar Roles</span>
+          </button>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200/80">
-                <span className="text-slate-400 font-semibold block text-[10px]">PROYECTO:</span>
-                <span className="font-bold text-slate-800 break-all">{SUPABASE_PROJECT_CONFIG.projectName}</span>
-              </div>
+          <button
+            onClick={() => setActiveTab('schema')}
+            className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 border-b-2 ${
+              activeTab === 'schema'
+                ? 'bg-white text-emerald-700 border-emerald-600 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-800 border-transparent'
+            }`}
+          >
+            <Code2 className="w-4 h-4 text-emerald-600" />
+            <span>Esquema Completo de Tablas</span>
+          </button>
+        </div>
 
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200/80">
-                <span className="text-slate-400 font-semibold block text-[10px]">ID DEL PROYECTO:</span>
-                <span className="font-mono font-bold text-slate-800">{SUPABASE_PROJECT_CONFIG.projectId}</span>
-              </div>
+        {/* Body Content */}
+        <div className="p-6 space-y-6 max-h-[72vh] overflow-y-auto">
+          {/* ================= TAB 1: ROLES & SQL GENERATOR ================= */}
+          {activeTab === 'roles' && (
+            <div className="space-y-6">
+              {/* Role Generator Card */}
+              <div className="bg-gradient-to-br from-blue-50/80 to-indigo-50/80 border border-blue-200/90 rounded-2xl p-5 space-y-4 shadow-2xs">
+                <div className="flex items-center gap-2 text-blue-900 font-bold text-sm">
+                  <ShieldAlert className="w-5 h-5 text-blue-600" />
+                  <span>Generador de Consultas SQL para Asignación de Roles</span>
+                </div>
+                <p className="text-xs text-slate-600">
+                  Selecciona el correo del usuario y el rol deseado para generar la sentencia SQL exacta que puedes ejecutar en el SQL Editor de Supabase o aplicar directamente.
+                </p>
 
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 sm:col-span-2">
-                <span className="text-slate-400 font-semibold block text-[10px]">URL ENDPOINT (REST API):</span>
-                <span className="font-mono text-emerald-700 font-medium break-all">{SUPABASE_PROJECT_CONFIG.url}</span>
-              </div>
-            </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                      Correo Electrónico del Usuario:
+                    </label>
+                    <input
+                      type="email"
+                      value={targetEmail}
+                      onChange={(e) => setTargetEmail(e.target.value)}
+                      placeholder="usuario@empresa.com"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white font-medium focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
 
-            {/* Test Connection & Actions */}
-            <div className="flex flex-wrap items-center gap-2.5 pt-1">
-              <button
-                onClick={handleTestConnection}
-                disabled={testing}
-                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${testing ? 'animate-spin' : ''}`} />
-                {testing ? 'Comprobando...' : 'Probar Conexión Supabase'}
-              </button>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                      Nuevo Rol a Asignar:
+                    </label>
+                    <select
+                      value={selectedRole}
+                      onChange={(e) => setSelectedRole(e.target.value as UserRole)}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white font-bold text-blue-900 focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      {ROLES_LIST.map((r, idx) => (
+                        <option key={idx} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-              <button
-                onClick={handleManualSync}
-                disabled={syncing}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-              >
-                <Layers className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? 'Sincronizando...' : 'Sincronizar Base de Datos'}
-              </button>
+                {/* Direct Action Buttons */}
+                <div className="flex flex-wrap items-center gap-2 pt-2">
+                  <button
+                    onClick={handleCopyRoleSql}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm ${
+                      copiedRoleSql
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    {copiedRoleSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedRoleSql ? '¡SQL Copiado!' : 'Copiar SQL de Cambio de Rol'}
+                  </button>
 
-              <a
-                href={`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_CONFIG.projectId}/sql`}
-                target="_blank"
-                rel="noreferrer"
-                className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-white text-slate-700 text-xs font-semibold transition-all flex items-center gap-1.5 ml-auto"
-              >
-                <ExternalLink className="w-3.5 h-3.5 text-blue-600" /> Abrir Supabase SQL Editor
-              </a>
-            </div>
+                  <button
+                    onClick={handleExecuteRoleChange}
+                    disabled={updatingRole || !targetEmail}
+                    className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${updatingRole ? 'animate-spin' : ''}`} />
+                    {updatingRole ? 'Aplicando...' : 'Aplicar Rol en Supabase Ahora'}
+                  </button>
 
-            {/* Status Alert */}
-            {connectionStatus.tested && (
-              <div
-                className={`p-3.5 rounded-xl text-xs font-medium flex items-start gap-2.5 border animate-fade-in ${
-                  connectionStatus.success && connectionStatus.tablesReady
-                    ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
-                    : connectionStatus.success && !connectionStatus.tablesReady
-                    ? 'bg-amber-50 text-amber-900 border-amber-200'
-                    : 'bg-rose-50 text-rose-900 border-rose-200'
-                }`}
-              >
-                {connectionStatus.success && connectionStatus.tablesReady ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <a
+                    href={`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_CONFIG.projectId}/sql`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all flex items-center gap-1.5 ml-auto"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-blue-600" /> Abrir Supabase SQL
+                  </a>
+                </div>
+
+                {/* Role Feedback Message */}
+                {roleUpdateMsg && (
+                  <div
+                    className={`p-3 rounded-xl text-xs font-medium flex items-center gap-2 border animate-fade-in ${
+                      roleUpdateMsg.success
+                        ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                        : 'bg-rose-50 text-rose-900 border-rose-200'
+                    }`}
+                  >
+                    {roleUpdateMsg.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    )}
+                    <span>{roleUpdateMsg.text}</span>
+                  </div>
                 )}
-                <div>
-                  <p className="font-bold">{connectionStatus.message}</p>
-                  {!connectionStatus.tablesReady && (
-                    <p className="text-[11px] mt-1 text-slate-600">
-                      Copia el script SQL de abajo, ve a la sección <strong>SQL Editor</strong> en Supabase, pégalo y haz clic en <strong>RUN</strong>.
-                    </p>
-                  )}
+              </div>
+
+              {/* Dynamic SQL Code Window */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Terminal className="w-3.5 h-3.5 text-blue-600" /> Código SQL para Ejecutar en Supabase:
+                </span>
+                <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950">
+                  <pre className="p-4 text-[11px] font-mono text-emerald-400 max-h-56 overflow-y-auto leading-relaxed scrollbar-thin">
+                    {dynamicRoleSql}
+                  </pre>
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* Step by Step Guide */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-              <Terminal className="w-4 h-4 text-blue-600" /> Pasos Rápidos para Ejecutar el SQL en Supabase:
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-              <div className="bg-blue-50/60 border border-blue-200/80 p-3 rounded-xl">
-                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold inline-flex items-center justify-center text-[10px] mr-1.5">1</span>
-                <strong>Copiar SQL:</strong> Haz clic en el botón <em>"Copiar Script SQL"</em> abajo.
-              </div>
-              <div className="bg-blue-50/60 border border-blue-200/80 p-3 rounded-xl">
-                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold inline-flex items-center justify-center text-[10px] mr-1.5">2</span>
-                <strong>Abrir SQL Editor:</strong> Entra a tu proyecto en el panel de Supabase.
-              </div>
-              <div className="bg-blue-50/60 border border-blue-200/80 p-3 rounded-xl">
-                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold inline-flex items-center justify-center text-[10px] mr-1.5">3</span>
-                <strong>Ejecutar (Run):</strong> Pega el código y presiona <em>Run</em> para crear las tablas y RLS.
+              {/* Roles Reference Table */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-indigo-600" /> Roles y Permisos Disponibles en el Sistema:
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
+                    <p className="font-bold text-purple-700">Administrador de Capacitación</p>
+                    <p className="text-[11px] text-slate-500">Acceso total, configuración, gestión de roles y auditoría.</p>
+                  </div>
+                  <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
+                    <p className="font-bold text-blue-700">Coordinador de Capacitación</p>
+                    <p className="text-[11px] text-slate-500">Creación de eventos, presupuestos y control de participantes.</p>
+                  </div>
+                  <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
+                    <p className="font-bold text-emerald-700">Instructor / Capacitador</p>
+                    <p className="text-[11px] text-slate-500">Control de asistencia de sus cursos y firma digital.</p>
+                  </div>
+                  <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
+                    <p className="font-bold text-amber-700">Recursos Humanos (RH)</p>
+                    <p className="text-[11px] text-slate-500">Aprobación de constancias y validación de horas-hombre.</p>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* SQL Code Block with Copy Button */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <Database className="w-3.5 h-3.5 text-emerald-600" /> Código SQL Completo para Supabase (PostgreSQL)
-              </span>
-              <button
-                onClick={handleCopySql}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs ${
-                  copied
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
-                }`}
-              >
-                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? '¡Copiado al Portapapeles!' : 'Copiar Script SQL'}
-              </button>
-            </div>
+          {/* ================= TAB 2: FULL SCHEMA SQL ================= */}
+          {activeTab === 'schema' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-emerald-600" /> Código SQL Completo de Tablas y Triggers
+                </span>
+                <button
+                  onClick={handleCopySchema}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs ${
+                    copiedSchema
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
+                >
+                  {copiedSchema ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedSchema ? '¡Copiado!' : 'Copiar Script SQL'}
+                </button>
+              </div>
 
-            <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950">
-              <pre className="p-4 text-[11px] font-mono text-emerald-400 max-h-72 overflow-y-auto leading-relaxed scrollbar-thin">
-                {sqlContent}
-              </pre>
+              <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950">
+                <pre className="p-4 text-[11px] font-mono text-emerald-400 max-h-72 overflow-y-auto leading-relaxed scrollbar-thin">
+                  {sqlContent}
+                </pre>
+              </div>
+
+              {/* Status & Sync buttons */}
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <button
+                  onClick={handleTestConnection}
+                  disabled={testing}
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${testing ? 'animate-spin' : ''}`} />
+                  {testing ? 'Comprobando...' : 'Probar Conexión Supabase'}
+                </button>
+
+                <button
+                  onClick={handleManualSync}
+                  disabled={syncing}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                >
+                  <Layers className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                  {syncing ? 'Sincronizando...' : 'Sincronizar Base de Datos'}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Footer */}

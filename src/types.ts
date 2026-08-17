@@ -71,18 +71,35 @@ export interface EventoData {
   estado: 'Registrado' | 'En Proceso' | 'Completado';
 }
 
+export type UserRole =
+  | 'Administrador de Capacitación'
+  | 'Coordinador de Capacitación'
+  | 'Instructor / Capacitador'
+  | 'Recursos Humanos (RH)'
+  | 'Participante / Empleado'
+  | 'Auditor / Consulta';
+
 export interface UserProfile {
+  id?: string;
   nombre: string;
   email: string;
   puesto: string;
   departamento: string;
   rfc: string;
   telefono: string;
-  rol: string;
+  rol: UserRole | string;
   avatarUrl: string;
   fechaIngreso: string;
   notificacionesEmail: boolean;
   modoOscuro: boolean;
 }
 
+export interface AuthSession {
+  user: UserProfile;
+  isSupabaseAuth: boolean;
+  token?: string;
+  lastLogin: string;
+}
+
 export type ModuleType = 'metricas' | 'registro' | 'historial' | 'perfil';
+

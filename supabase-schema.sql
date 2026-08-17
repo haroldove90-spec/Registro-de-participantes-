@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- SISTEMA DE CONTROL DE CAPACITACIÓN Y REGISTRO DE PARTICIPANTES
--- SUPABASE POSTGRESQL SCHEMA & ROW LEVEL SECURITY (RLS) POLICIES
+-- SUPABASE POSTGRESQL SCHEMA, AUTHENTICATION & ROLE MANAGEMENT (RLS)
 -- Project: registrodeparticipantes@appdesignsoftware.com (ID: acjelqhrflkxnkttlrkr)
 -- URL: https://acjelqhrflkxnkttlrkr.supabase.co
 -- ==============================================================================
@@ -69,16 +69,26 @@ CREATE TABLE IF NOT EXISTS public.participantes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 4. TABLA DE PERFILES DE USUARIO
+-- 4. TABLA DE PERFILES DE USUARIO Y ROLES
 CREATE TABLE IF NOT EXISTS public.perfiles_usuario (
-    id TEXT PRIMARY KEY DEFAULT 'default_user',
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     nombre TEXT NOT NULL,
-    email TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
     puesto TEXT DEFAULT '',
     departamento TEXT DEFAULT '',
     rfc TEXT DEFAULT '',
     telefono TEXT DEFAULT '',
-    rol TEXT DEFAULT 'Administrador de Capacitación',
+    rol TEXT NOT NULL DEFAULT 'Coordinador de Capacitación' CHECK (
+        rol IN (
+            'Administrador de Capacitación',
+            'Coordinador de Capacitación',
+            'Instructor / Capacitador',
+            'Recursos Humanos (RH)',
+            'Participante / Empleado',
+            'Auditor / Consulta'
+        )
+    ),
     avatar_url TEXT DEFAULT '',
     fecha_ingreso DATE DEFAULT CURRENT_DATE,
     notificaciones_email BOOLEAN DEFAULT true,
@@ -93,13 +103,15 @@ CREATE INDEX IF NOT EXISTS idx_participantes_pos ON public.participantes(evento_
 CREATE INDEX IF NOT EXISTS idx_eventos_fecha_inicio ON public.eventos(fecha_inicio DESC);
 CREATE INDEX IF NOT EXISTS idx_eventos_tipo_evento ON public.eventos(tipo_evento);
 CREATE INDEX IF NOT EXISTS idx_eventos_modalidad ON public.eventos(ubicacion_modalidad);
+CREATE INDEX IF NOT EXISTS idx_perfiles_email ON public.perfiles_usuario(email);
+CREATE INDEX IF NOT EXISTS idx_perfiles_rol ON public.perfiles_usuario(rol);
 
 -- 6. HABILITAR ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.eventos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.participantes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.perfiles_usuario ENABLE ROW LEVEL SECURITY;
 
--- 7. POLÍTICAS DE ACCESO COMPLETO (ANON KEY / PUBLIC ACCESS)
+-- 7. POLÍTICAS DE ACCESO COMPLETO (ANON KEY / AUTH USERS)
 -- Eventos
 DROP POLICY IF EXISTS "Permitir lectura publica de eventos" ON public.eventos;
 CREATE POLICY "Permitir lectura publica de eventos" ON public.eventos FOR SELECT USING (true);
@@ -154,7 +166,126 @@ CREATE TRIGGER tr_perfiles_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_updated_at();
 
--- 9. INSERTAR PERFIL INICIAL POR DEFECTO
+-- 9. TRIGGER PARA REGISTRO AUTOMÁTICO EN PERFILES AL CREAR USUARIO EN SUPABASE AUTH
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.perfiles_usuario (
+        id,
+        user_id,
+        nombre,
+        email,
+        puesto,
+        departamento,
+        rfc,
+        telefono,
+        rol,
+        avatar_url,
+        fecha_ingreso,
+        notificaciones_email,
+        modo_oscuro
+    )
+    VALUES (
+        NEW.id::text,
+        NEW.id,
+        COALESCE(NEW.raw_user_meta_data->>'nombre', split_part(NEW.email, '@', 1)),
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'puesto', 'Colaborador'),
+        COALESCE(NEW.raw_user_meta_data->>'departamento', 'General'),
+        COALESCE(NEW.raw_user_meta_data->>'rfc', 'XAXX010101000'),
+        COALESCE(NEW.raw_user_meta_data->>'telefono', ''),
+        COALESCE(
+            NEW.raw_user_meta_data->>'rol',
+            'Coordinador de Capacitación'
+        ),
+        COALESCE(
+            NEW.raw_user_meta_data->>'avatar_url',
+            'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80'
+        ),
+        CURRENT_DATE,
+        true,
+        false
+    )
+    ON CONFLICT (email) DO UPDATE SET
+        user_id = EXCLUDED.user_id,
+        nombre = EXCLUDED.nombre,
+        updated_at = timezone('utc'::text, now());
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_new_user();
+
+-- ==============================================================================
+-- 10. FUNCIONES SQL PARA CAMBIAR Y GESTIONAR ROLES DE USUARIO
+-- ==============================================================================
+
+-- Función 1: Cambiar rol de usuario por Email
+CREATE OR REPLACE FUNCTION public.cambiar_rol_usuario(
+    target_email TEXT,
+    nuevo_rol TEXT
+)
+RETURNS JSON AS $$
+DECLARE
+    result_user public.perfiles_usuario%ROWTYPE;
+BEGIN
+    -- Validar que el rol sea uno de los permitidos
+    IF nuevo_rol NOT IN (
+        'Administrador de Capacitación',
+        'Coordinador de Capacitación',
+        'Instructor / Capacitador',
+        'Recursos Humanos (RH)',
+        'Participante / Empleado',
+        'Auditor / Consulta'
+    ) THEN
+        RAISE EXCEPTION 'Rol no válido: %. Debe ser uno de los roles autorizados.', nuevo_rol;
+    END IF;
+
+    -- Actualizar rol en la tabla perfiles_usuario
+    UPDATE public.perfiles_usuario
+    SET rol = nuevo_rol,
+        updated_at = timezone('utc'::text, now())
+    WHERE LOWER(email) = LOWER(target_email)
+    RETURNING * INTO result_user;
+
+    IF NOT FOUND THEN
+        -- Si no existe en perfiles_usuario, intentar crearlo
+        INSERT INTO public.perfiles_usuario (
+            id,
+            nombre,
+            email,
+            rol
+        )
+        VALUES (
+            gen_random_uuid()::text,
+            split_part(target_email, '@', 1),
+            target_email,
+            nuevo_rol
+        )
+        RETURNING * INTO result_user;
+    END IF;
+
+    -- Sincronizar también con raw_user_meta_data en auth.users si existe
+    UPDATE auth.users
+    SET raw_user_meta_data = raw_user_meta_data || jsonb_build_object('rol', nuevo_rol)
+    WHERE LOWER(email) = LOWER(target_email);
+
+    RETURN json_build_object(
+        'success', true,
+        'email', result_user.email,
+        'nombre', result_user.nombre,
+        'nuevo_rol', result_user.rol,
+        'mensaje', 'Rol actualizado con éxito a: ' || nuevo_rol
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 11. INSERTAR PERFIL ADMINISTRADOR POR DEFECTO
 INSERT INTO public.perfiles_usuario (id, nombre, email, puesto, departamento, rfc, telefono, rol, avatar_url, notificaciones_email, modo_oscuro)
 VALUES (
     'default_user',
@@ -169,4 +300,31 @@ VALUES (
     true,
     false
 )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (email) DO NOTHING;
+
+-- ==============================================================================
+-- EJEMPLOS DE SENTENCIAS SQL PARA CAMBIAR ROLES DIRECTAMENTE EN SUPABASE SQL EDITOR:
+-- ==============================================================================
+--
+-- Ejemplo 1: Cambiar rol usando la función helper:
+-- SELECT public.cambiar_rol_usuario('usuario@empresa.com', 'Administrador de Capacitación');
+--
+-- Ejemplo 2: Cambiar rol con UPDATE directo por email:
+-- UPDATE public.perfiles_usuario
+-- SET rol = 'Administrador de Capacitación'
+-- WHERE email = 'registrodeparticipantes@appdesignsoftware.com';
+--
+-- Ejemplo 3: Asignar rol de Instructor a un usuario:
+-- UPDATE public.perfiles_usuario
+-- SET rol = 'Instructor / Capacitador'
+-- WHERE email = 'instructor@empresa.com';
+--
+-- Ejemplo 4: Asignar rol de Recursos Humanos (RH):
+-- UPDATE public.perfiles_usuario
+-- SET rol = 'Recursos Humanos (RH)'
+-- WHERE email = 'rh@empresa.com';
+--
+-- Ejemplo 5: Consultar lista completa de usuarios y sus roles asignados:
+-- SELECT email, nombre, puesto, departamento, rol, updated_at
+-- FROM public.perfiles_usuario
+-- ORDER BY created_at DESC;
