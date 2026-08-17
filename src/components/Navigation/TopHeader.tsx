@@ -1,17 +1,19 @@
 import React from 'react';
 import { UserProfile, ModuleType } from '../../types';
-import { Calendar, Bell, Building2 } from 'lucide-react';
+import { Calendar, Bell, Building2, Database } from 'lucide-react';
 
 interface TopHeaderProps {
   activeModule: ModuleType;
   setActiveModule: (module: ModuleType) => void;
   userProfile: UserProfile;
+  onOpenSupabaseModal?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   activeModule,
   setActiveModule,
   userProfile,
+  onOpenSupabaseModal,
 }) => {
   const getModuleTitle = () => {
     switch (activeModule) {
@@ -62,10 +64,25 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         </div>
 
         {/* Top Right Info & Quick Actions */}
-        <div className="flex items-center gap-3 self-end sm:self-center">
+        <div className="flex items-center gap-2.5 self-end sm:self-center">
+          {/* Supabase Status Button */}
+          {onOpenSupabaseModal && (
+            <button
+              type="button"
+              onClick={onOpenSupabaseModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold transition-all shadow-2xs group"
+              title="Configuración y SQL de Supabase"
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
+              <span className="hidden sm:inline">Supabase:</span>
+              <span className="font-mono text-[11px] text-emerald-900 font-bold">Conectado</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            </button>
+          )}
+
           <div className="hidden lg:flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs text-slate-600">
             <Calendar className="w-3.5 h-3.5 text-blue-600" />
-            <span>Período Lectivo 2026</span>
+            <span>Período 2026</span>
           </div>
 
           <button
@@ -96,3 +113,4 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     </header>
   );
 };
+

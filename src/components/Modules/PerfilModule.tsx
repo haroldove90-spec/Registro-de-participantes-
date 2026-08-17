@@ -19,17 +19,24 @@ import {
   Moon,
   Sun,
   Sparkles,
+  Database,
+  Code2,
+  Layers,
 } from 'lucide-react';
+import { SUPABASE_PROJECT_CONFIG } from '../../lib/supabase';
 
 interface PerfilModuleProps {
   userProfile: UserProfile;
   onSaveProfile: (updatedProfile: UserProfile) => void;
+  onOpenSupabaseModal?: () => void;
 }
 
 export const PerfilModule: React.FC<PerfilModuleProps> = ({
   userProfile,
   onSaveProfile,
+  onOpenSupabaseModal,
 }) => {
+
   // Form State
   const [nombre, setNombre] = useState(userProfile.nombre);
   const [email, setEmail] = useState(userProfile.email);
@@ -321,6 +328,61 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-slate-50 font-medium"
                 />
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Supabase Cloud Database Integration Card */}
+        <div className="bg-white rounded-2xl border border-emerald-200/90 shadow-2xs overflow-hidden">
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-200/80 px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">
+                <Database className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Base de Datos en la Nube (Supabase)</h3>
+                <p className="text-xs text-slate-500">Sincronización en tiempo real y persistencia en la nube</p>
+              </div>
+            </div>
+
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Activo
+            </span>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <p className="text-slate-400 font-semibold text-[10px] uppercase">Proyecto</p>
+                <p className="font-bold text-slate-800 break-all">{SUPABASE_PROJECT_CONFIG.projectName}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <p className="text-slate-400 font-semibold text-[10px] uppercase">ID de Proyecto</p>
+                <p className="font-mono font-bold text-slate-800">{SUPABASE_PROJECT_CONFIG.projectId}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <p className="text-slate-400 font-semibold text-[10px] uppercase">Estado de Sincronización</p>
+                <p className="font-bold text-emerald-700 flex items-center gap-1 mt-0.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Automática
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <p className="text-xs text-slate-500">
+                Todos los eventos, asistencias, horas-hombre y costos se respaldan en Supabase PostgreSQL.
+              </p>
+
+              {onOpenSupabaseModal && (
+                <button
+                  type="button"
+                  onClick={onOpenSupabaseModal}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                >
+                  <Code2 className="w-3.5 h-3.5" /> Ver SQL y Probar Conexión
+                </button>
+              )}
             </div>
           </div>
         </div>

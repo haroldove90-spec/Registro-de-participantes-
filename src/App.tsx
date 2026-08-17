@@ -7,6 +7,7 @@ import {
   deleteEvento,
   getStoredUserProfile,
   saveStoredUserProfile,
+  initializeSupabaseSync,
 } from './utils/storage';
 import { Sidebar } from './components/Navigation/Sidebar';
 import { MobileBottomNav } from './components/Navigation/MobileBottomNav';
@@ -15,16 +16,26 @@ import { RegistroModule } from './components/Modules/RegistroModule';
 import { HistorialModule } from './components/Modules/HistorialModule';
 import { MetricasModule } from './components/Modules/MetricasModule';
 import { PerfilModule } from './components/Modules/PerfilModule';
+import { SupabaseModal } from './components/SupabaseModal';
 
 export default function App() {
   const [activeModule, setActiveModule] = useState<ModuleType>('metricas');
   const [eventos, setEventos] = useState<EventoData[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile>(getStoredUserProfile());
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
-  // Load initial eventos from storage
+  // Load initial eventos from storage and synchronize with Supabase Cloud
   useEffect(() => {
     const loadedEventos = getStoredEventos();
     setEventos(loadedEventos);
+
+    // Background sync with Supabase
+    initializeSupabaseSync().then((res) => {
+      if (res.synced) {
+        setEventos(res.eventos);
+        setUserProfile(res.profile);
+      }
+    });
   }, []);
 
   // Event Handlers
@@ -65,6 +76,7 @@ export default function App() {
           activeModule={activeModule}
           setActiveModule={setActiveModule}
           userProfile={userProfile}
+          onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
         />
 
         {/* Dynamic Module Body */}
@@ -93,6 +105,7 @@ export default function App() {
             <PerfilModule
               userProfile={userProfile}
               onSaveProfile={handleSaveProfile}
+              onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
             />
           )}
         </main>
@@ -104,6 +117,17 @@ export default function App() {
         setActiveModule={setActiveModule}
         totalEventosCount={eventos.length}
       />
+
+      {/* Supabase Configuration and SQL Modal */}
+      <SupabaseModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
+        onDataSynced={(syncedEventos, syncedProfile) => {
+          setEventos(syncedEventos);
+          setUserProfile(syncedProfile);
+        }}
+      />
     </div>
   );
 }
+
