@@ -110,6 +110,7 @@ export default function App() {
           {activeModule === 'historial' && (
             <HistorialModule
               eventos={eventos}
+              userProfile={userProfile}
               onDeleteEvento={handleDeleteEvento}
               onUpdateEvento={handleUpdateEvento}
               onSyncEventos={(synced) => setEventos(synced)}
@@ -123,9 +124,11 @@ export default function App() {
           {activeModule === 'perfil' && (
             <PerfilModule
               userProfile={userProfile}
+              eventos={eventos}
               onSaveProfile={handleSaveProfile}
               onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
               onOpenAuthModal={() => setIsAuthModalOpen(true)}
+              onNavigateToHistorial={() => setActiveModule('historial')}
             />
           )}
         </main>

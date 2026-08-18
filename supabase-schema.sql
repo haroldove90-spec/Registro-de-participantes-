@@ -1,12 +1,12 @@
 -- ==============================================================================
 -- SISTEMA DE CONTROL DE CAPACITACIÓN Y REGISTRO DE PARTICIPANTES
--- SCRIPT SQL DEFINITIVO Y A PRUEBA DE ERRORES PARA SUPABASE (POSTGRESQL)
+-- SCRIPT SQL DEFINITIVO CON PERFILES, ROLES Y PARTICIPANTES
 -- ==============================================================================
 
 -- 1. HABILITAR EXTENSIÓN PARA GENERACIÓN DE UUID
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. ELIMINAR TABLAS PREVIAS SI EXISTEN (PARA EMPEZAR 100% LIMPIO Y SIN ERRORES)
+-- 2. ELIMINAR TABLAS PREVIAS DE FORMA SEGURA SI EXISTEN
 DROP TABLE IF EXISTS public.participantes CASCADE;
 DROP TABLE IF EXISTS public.eventos CASCADE;
 DROP TABLE IF EXISTS public.perfiles_usuario CASCADE;
@@ -50,21 +50,24 @@ CREATE TABLE public.eventos (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 4. TABLA DE PARTICIPANTES (LISTA DE ASISTENCIA Y FIRMAS)
+-- 4. TABLA DE PARTICIPANTES (CON SOPORTE PARA CUENTAS DE USUARIO Y FIRMA DIGITAL)
 CREATE TABLE public.participantes (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     evento_id TEXT NOT NULL REFERENCES public.eventos(id) ON DELETE CASCADE,
     pos INTEGER NOT NULL,
     no_emp TEXT DEFAULT '',
     nombre TEXT NOT NULL,
+    email TEXT,
     genero TEXT NOT NULL CHECK (genero IN ('H', 'M')),
     puesto TEXT DEFAULT '',
     depto TEXT DEFAULT '',
     firma TEXT DEFAULT '',
+    confirmado BOOLEAN DEFAULT true,
+    fecha_confirmacion TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 5. TABLA DE PERFILES DE USUARIO Y ASIGNACIÓN DE ROLES
+-- 5. TABLA DE PERFILES DE USUARIO, FOTOGRAFÍA Y ROLES
 CREATE TABLE public.perfiles_usuario (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     user_id UUID,
@@ -74,7 +77,7 @@ CREATE TABLE public.perfiles_usuario (
     departamento TEXT DEFAULT '',
     rfc TEXT DEFAULT '',
     telefono TEXT DEFAULT '',
-    rol TEXT NOT NULL DEFAULT 'Administrador de Capacitación' CHECK (
+    rol TEXT NOT NULL DEFAULT 'Participante / Empleado' CHECK (
         rol IN (
             'Administrador de Capacitación',
             'Coordinador de Capacitación',
@@ -94,6 +97,7 @@ CREATE TABLE public.perfiles_usuario (
 
 -- 6. ÍNDICES DE BÚSQUEDA Y RENDIMIENTO
 CREATE INDEX IF NOT EXISTS idx_participantes_evento_id ON public.participantes(evento_id);
+CREATE INDEX IF NOT EXISTS idx_participantes_email ON public.participantes(email);
 CREATE INDEX IF NOT EXISTS idx_participantes_pos ON public.participantes(evento_id, pos);
 CREATE INDEX IF NOT EXISTS idx_eventos_fecha_inicio ON public.eventos(fecha_inicio DESC);
 CREATE INDEX IF NOT EXISTS idx_eventos_tipo_evento ON public.eventos(tipo_evento);
@@ -173,7 +177,7 @@ BEGIN
         COALESCE(NEW.raw_user_meta_data->>'departamento', 'General'),
         COALESCE(NEW.raw_user_meta_data->>'rfc', 'XAXX010101000'),
         COALESCE(NEW.raw_user_meta_data->>'telefono', ''),
-        COALESCE(NEW.raw_user_meta_data->>'rol', 'Administrador de Capacitación'),
+        COALESCE(NEW.raw_user_meta_data->>'rol', 'Participante / Empleado'),
         COALESCE(NEW.raw_user_meta_data->>'avatar_url', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'),
         CURRENT_DATE
     )
@@ -190,7 +194,7 @@ CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- 11. FUNCIÓN PARA ASIGNAR O CAMBIAR ROLES DE USUARIO FÁCILMENTE
+-- 11. FUNCIÓN PARA CAMBIAR Y ASIGNAR ROLES DE USUARIO
 CREATE OR REPLACE FUNCTION public.cambiar_rol_usuario(
     target_email text,
     nuevo_rol text
@@ -232,7 +236,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 12. CREAR PERFILES ADMINISTRADORES INICIALES
+-- 12. PERFIL PRINCIPAL DE ADMINISTRADOR
 INSERT INTO public.perfiles_usuario (id, nombre, email, puesto, departamento, rfc, telefono, rol, avatar_url)
 VALUES 
 (
@@ -245,17 +249,6 @@ VALUES
     '+52 (55) 1234-5678',
     'Administrador de Capacitación',
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'
-),
-(
-    'admin_corp',
-    'Administrador del Sistema',
-    'registrodeparticipantes@appdesignsoftware.com',
-    'Administrador de Capacitación',
-    'Recursos Humanos y Capacitación',
-    'MEGA890412HR4',
-    '+52 (55) 8492-3021',
-    'Administrador de Capacitación',
-    'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80'
 )
 ON CONFLICT (email) DO UPDATE SET
     rol = EXCLUDED.rol,

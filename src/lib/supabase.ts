@@ -206,10 +206,13 @@ export async function fetchEventosFromSupabase(): Promise<EventoData[] | null> {
         pos: p.pos,
         noEmp: p.no_emp || '',
         nombre: p.nombre,
+        email: p.email || undefined,
         genero: p.genero,
         puesto: p.puesto || '',
         depto: p.depto || '',
         firma: p.firma || undefined,
+        confirmado: p.confirmado !== undefined ? p.confirmado : true,
+        fechaConfirmacion: p.fecha_confirmacion || undefined,
       });
     });
 
@@ -249,10 +252,13 @@ export async function upsertEventoToSupabase(evento: EventoData): Promise<{ succ
         pos: p.pos || idx + 1,
         no_emp: p.noEmp || '',
         nombre: p.nombre,
+        email: p.email || null,
         genero: p.genero,
         puesto: p.puesto || '',
         depto: p.depto || '',
         firma: p.firma || '',
+        confirmado: p.confirmado !== undefined ? p.confirmado : true,
+        fecha_confirmacion: p.fechaConfirmacion || new Date().toISOString(),
       }));
 
       const { error: partError } = await supabase.from('participantes').insert(partRows);

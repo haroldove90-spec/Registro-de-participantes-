@@ -138,31 +138,34 @@ CREATE TABLE public.eventos (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 3. TABLA DE PARTICIPANTES (LISTA DE ASISTENCIA / COLEGA PARTICIPANTE)
+-- 3. TABLA DE PARTICIPANTES (LISTA DE ASISTENCIA Y ASIGNACIÓN)
 CREATE TABLE IF NOT EXISTS public.participantes (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     evento_id TEXT NOT NULL REFERENCES public.eventos(id) ON DELETE CASCADE,
     pos INTEGER NOT NULL,
     no_emp TEXT DEFAULT '',
     nombre TEXT NOT NULL,
+    email TEXT,
     genero TEXT NOT NULL CHECK (genero IN ('H', 'M')),
     puesto TEXT DEFAULT '',
     depto TEXT DEFAULT '',
     firma TEXT DEFAULT '',
+    confirmado BOOLEAN DEFAULT true,
+    fecha_confirmacion TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 4. TABLA DE PERFILES DE USUARIO Y ROLES
+-- 4. TABLA DE PERFILES DE USUARIO, FOTOGRAFÍA Y ROLES
 CREATE TABLE IF NOT EXISTS public.perfiles_usuario (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_id UUID,
     nombre TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     puesto TEXT DEFAULT '',
     departamento TEXT DEFAULT '',
     rfc TEXT DEFAULT '',
     telefono TEXT DEFAULT '',
-    rol TEXT NOT NULL DEFAULT 'Coordinador de Capacitación' CHECK (
+    rol TEXT NOT NULL DEFAULT 'Participante / Empleado' CHECK (
         rol IN (
             'Administrador de Capacitación',
             'Coordinador de Capacitación',

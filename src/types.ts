@@ -8,10 +8,13 @@ export interface Participant {
   pos: number; // Posición / Consecutivo
   noEmp: string; // Número de Empleado
   nombre: string;
+  email?: string; // Correo del participante
   genero: Genero;
   puesto: string;
   depto: string; // Departamento
   firma?: string; // Data URL or signature text
+  confirmado?: boolean; // Confirmación de participación
+  fechaConfirmacion?: string;
 }
 
 export interface Instructor {

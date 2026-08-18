@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { EventoData, Participant } from '../../types';
+import { EventoData, Participant, UserProfile } from '../../types';
 import {
   exportEventoToExcel,
   exportAllEventosToExcel,
@@ -28,12 +28,19 @@ import {
   Database,
   RefreshCw,
   AlertCircle,
+  Check,
+  UserPlus,
+  BookmarkCheck,
+  BookOpen,
+  Award,
+  PenTool,
 } from 'lucide-react';
-import { syncAllLocalEventsToSupabase, fetchEventosFromSupabase } from '../../lib/supabase';
-import { saveStoredEventos } from '../../utils/storage';
+import { syncAllLocalEventsToSupabase, fetchEventosFromSupabase, upsertEventoToSupabase } from '../../lib/supabase';
+import { SignatureCanvas } from '../SignatureCanvas';
 
 interface HistorialModuleProps {
   eventos: EventoData[];
+  userProfile?: UserProfile;
   onDeleteEvento: (id: string) => void;
   onUpdateEvento: (eventoActualizado: EventoData) => void;
   onSyncEventos?: (eventos: EventoData[]) => void;
@@ -41,6 +48,7 @@ interface HistorialModuleProps {
 
 export const HistorialModule: React.FC<HistorialModuleProps> = ({
   eventos,
+  userProfile,
   onDeleteEvento,
   onUpdateEvento,
   onSyncEventos,
@@ -48,11 +56,29 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTipo, setFilterTipo] = useState<string>('todos');
   const [filterModalidad, setFilterModalidad] = useState<string>('todos');
+  const [activeTab, setActiveTab] = useState<'todos' | 'mis_inscripciones' | 'disponibles'>('todos');
   const [selectedEvento, setSelectedEvento] = useState<EventoData | null>(null);
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ success?: boolean; text?: string } | null>(null);
+
+  // Self-Enrollment Modal State
+  const [enrollingEvento, setEnrollingEvento] = useState<EventoData | null>(null);
+  const [enrollNoEmp, setEnrollNoEmp] = useState(userProfile?.rfc || 'EMP-');
+  const [enrollGenero, setEnrollGenero] = useState<'H' | 'M'>('H');
+  const [enrollPuesto, setEnrollPuesto] = useState(userProfile?.puesto || '');
+  const [enrollDepto, setEnrollDepto] = useState(userProfile?.departamento || '');
+  const [enrollFirma, setEnrollFirma] = useState<string>('');
+  const [enrollSuccess, setEnrollSuccess] = useState<string | null>(null);
+
+  // Manual Add Participant Modal inside Event Detail
+  const [showAddParticipantModal, setShowAddParticipantModal] = useState(false);
+  const [newNoEmp, setNewNoEmp] = useState('');
+  const [newNombre, setNewNombre] = useState('');
+  const [newGenero, setNewGenero] = useState<'H' | 'M'>('H');
+  const [newPuesto, setNewPuesto] = useState('');
+  const [newDepto, setNewDepto] = useState('');
 
   const handleSyncToSupabase = async () => {
     setIsSyncing(true);
@@ -76,13 +102,79 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
     setIsSyncing(false);
   };
 
-  // New Participant Modal inside Event Detail
-  const [showAddParticipantModal, setShowAddParticipantModal] = useState(false);
-  const [newNoEmp, setNewNoEmp] = useState('');
-  const [newNombre, setNewNombre] = useState('');
-  const [newGenero, setNewGenero] = useState<'H' | 'M'>('H');
-  const [newPuesto, setNewPuesto] = useState('');
-  const [newDepto, setNewDepto] = useState('');
+  // Check if current user is enrolled in an event
+  const isUserEnrolled = (evt: EventoData): boolean => {
+    if (!userProfile) return false;
+    return evt.participantes?.some(
+      (p) =>
+        (p.email && p.email.toLowerCase() === userProfile.email.toLowerCase()) ||
+        p.nombre.toLowerCase().trim() === userProfile.nombre.toLowerCase().trim()
+    );
+  };
+
+  // Open enrollment modal
+  const handleOpenEnrollModal = (evt: EventoData) => {
+    setEnrollingEvento(evt);
+    setEnrollNoEmp(userProfile?.rfc ? `EMP-${userProfile.rfc.slice(0, 4)}` : 'EMP-100');
+    setEnrollPuesto(userProfile?.puesto || '');
+    setEnrollDepto(userProfile?.departamento || '');
+    setEnrollFirma('');
+  };
+
+  // Submit enrollment
+  const handleConfirmEnrollment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!enrollingEvento || !userProfile) return;
+
+    // Check if already in
+    if (isUserEnrolled(enrollingEvento)) {
+      alert('Ya te encuentras registrado en este evento.');
+      setEnrollingEvento(null);
+      return;
+    }
+
+    const newParticipant: Participant = {
+      id: `p_user_${Date.now()}`,
+      pos: enrollingEvento.participantes.length + 1,
+      noEmp: enrollNoEmp || `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
+      nombre: userProfile.nombre,
+      email: userProfile.email,
+      genero: enrollGenero,
+      puesto: enrollPuesto || userProfile.puesto || 'Colaborador',
+      depto: enrollDepto || userProfile.departamento || 'General',
+      firma: enrollFirma || `Firma_Digital_${userProfile.nombre.replace(/\s+/g, '_')}`,
+      confirmado: true,
+      fechaConfirmacion: new Date().toISOString(),
+    };
+
+    const updatedParticipantes = [...enrollingEvento.participantes, newParticipant];
+    const hombresCount = updatedParticipantes.filter((p) => p.genero === 'H').length;
+    const mujeresCount = updatedParticipantes.filter((p) => p.genero === 'M').length;
+    const totalParticipantes = updatedParticipantes.length;
+    const horasHombreCapacitacion = totalParticipantes * (Number(enrollingEvento.horasCapacitacion) || 0);
+
+    const updatedEvento: EventoData = {
+      ...enrollingEvento,
+      participantes: updatedParticipantes,
+      hombresCount,
+      mujeresCount,
+      totalParticipantes,
+      horasHombreCapacitacion,
+    };
+
+    onUpdateEvento(updatedEvento);
+
+    if (selectedEvento && selectedEvento.id === updatedEvento.id) {
+      setSelectedEvento(updatedEvento);
+    }
+
+    setEnrollSuccess(`¡Te has inscrito exitosamente al evento "${enrollingEvento.nombreEvento}"!`);
+    setEnrollingEvento(null);
+    setTimeout(() => setEnrollSuccess(null), 5000);
+
+    // Sync to cloud
+    upsertEventoToSupabase(updatedEvento).catch(console.error);
+  };
 
   // Filtering events
   const filteredEventos = eventos.filter((evt) => {
@@ -93,7 +185,7 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
       evt.participantes.some(
         (p) =>
           p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          p.noEmp.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          p.puesto.toLowerCase().includes(searchTerm.toLowerCase()) ||
           p.depto.toLowerCase().includes(searchTerm.toLowerCase())
       );
 
@@ -101,43 +193,44 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
     const matchesModalidad =
       filterModalidad === 'todos' || evt.ubicacionModalidad === filterModalidad;
 
-    return matchesSearch && matchesTipo && matchesModalidad;
+    const enrolled = isUserEnrolled(evt);
+    const matchesTab =
+      activeTab === 'todos' ||
+      (activeTab === 'mis_inscripciones' && enrolled) ||
+      (activeTab === 'disponibles' && !enrolled);
+
+    return matchesSearch && matchesTipo && matchesModalidad && matchesTab;
   });
 
-  // Calculate Cumulative Metrics
-  const totalEventosCount = eventos.length;
-  const totalParticipantesCount = eventos.reduce((sum, e) => sum + e.totalParticipantes, 0);
-  const totalHorasHombreCount = eventos.reduce((sum, e) => sum + e.horasHombreCapacitacion, 0);
-  const totalInversionCount = eventos.reduce((sum, e) => sum + e.costos.totalCostos, 0);
-  const totalHombresCount = eventos.reduce((sum, e) => sum + e.hombresCount, 0);
-  const totalMujeresCount = eventos.reduce((sum, e) => sum + e.mujeresCount, 0);
+  const misInscripcionesCount = eventos.filter((evt) => isUserEnrolled(evt)).length;
+  const disponiblesCount = eventos.length - misInscripcionesCount;
 
-  // Add Participant to current viewing event
-  const handleAddParticipantToCurrentEvent = (e: React.FormEvent) => {
+  // Handle Add Participant inside Modal
+  const handleAddParticipant = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEvento || !newNombre.trim()) return;
+    if (!selectedEvento || !newNombre) return;
 
-    const nextPos = selectedEvento.participantes.length + 1;
     const newParticipant: Participant = {
-      id: Date.now().toString(),
-      pos: nextPos,
-      noEmp: newNoEmp.trim() || `EMP-${1000 + nextPos}`,
-      nombre: newNombre.trim(),
+      id: `p_man_${Date.now()}`,
+      pos: selectedEvento.participantes.length + 1,
+      noEmp: newNoEmp || `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
+      nombre: newNombre,
       genero: newGenero,
-      puesto: newPuesto.trim() || 'Operativo',
-      depto: newDepto.trim() || 'General',
-      firma: 'firmado',
+      puesto: newPuesto || 'Colaborador',
+      depto: newDepto || 'General',
+      firma: `firmado_${newNombre.replace(/\s+/g, '_')}`,
+      confirmado: true,
     };
 
-    const updatedParticipants = [...selectedEvento.participantes, newParticipant];
-    const hombresCount = updatedParticipants.filter((p) => p.genero === 'H').length;
-    const mujeresCount = updatedParticipants.filter((p) => p.genero === 'M').length;
-    const totalParticipantes = updatedParticipants.length;
-    const horasHombreCapacitacion = selectedEvento.horasCapacitacion * totalParticipantes;
+    const updatedParticipantes = [...selectedEvento.participantes, newParticipant];
+    const hombresCount = updatedParticipantes.filter((p) => p.genero === 'H').length;
+    const mujeresCount = updatedParticipantes.filter((p) => p.genero === 'M').length;
+    const totalParticipantes = updatedParticipantes.length;
+    const horasHombreCapacitacion = totalParticipantes * (Number(selectedEvento.horasCapacitacion) || 0);
 
     const updatedEvento: EventoData = {
       ...selectedEvento,
-      participantes: updatedParticipants,
+      participantes: updatedParticipantes,
       hombresCount,
       mujeresCount,
       totalParticipantes,
@@ -146,126 +239,187 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
 
     onUpdateEvento(updatedEvento);
     setSelectedEvento(updatedEvento);
+    setShowAddParticipantModal(false);
 
     // Reset Form
     setNewNoEmp('');
     setNewNombre('');
     setNewPuesto('');
     setNewDepto('');
-    setShowAddParticipantModal(false);
+
+    upsertEventoToSupabase(updatedEvento).catch(console.error);
   };
 
-  // Export event participants list to CSV
-  const exportEventCSV = (evt: EventoData) => {
-    const headers = ['Posicion', 'No_Empleado', 'Nombre_Participante', 'Genero', 'Puesto', 'Departamento', 'Firma'];
-    const rows = evt.participantes.map((p) => [
-      p.pos,
-      `"${p.noEmp}"`,
-      `"${p.nombre}"`,
-      p.genero,
-      `"${p.puesto}"`,
-      `"${p.depto}"`,
-      p.firma === 'firmado' ? 'Firmado' : 'Pendiente',
-    ]);
+  // Handle Delete Participant from selected event
+  const handleDeleteParticipant = (participantId: string) => {
+    if (!selectedEvento) return;
 
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const updatedParticipantes = selectedEvento.participantes
+      .filter((p) => p.id !== participantId)
+      .map((p, index) => ({ ...p, pos: index + 1 }));
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Lista_Asistencia_${evt.id}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const hombresCount = updatedParticipantes.filter((p) => p.genero === 'H').length;
+    const mujeresCount = updatedParticipantes.filter((p) => p.genero === 'M').length;
+    const totalParticipantes = updatedParticipantes.length;
+    const horasHombreCapacitacion = totalParticipantes * (Number(selectedEvento.horasCapacitacion) || 0);
+
+    const updatedEvento: EventoData = {
+      ...selectedEvento,
+      participantes: updatedParticipantes,
+      hombresCount,
+      mujeresCount,
+      totalParticipantes,
+      horasHombreCapacitacion,
+    };
+
+    onUpdateEvento(updatedEvento);
+    setSelectedEvento(updatedEvento);
+    upsertEventoToSupabase(updatedEvento).catch(console.error);
   };
 
-  // Print Event View
   const handlePrintEvent = () => {
     window.print();
   };
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-16">
-      {/* Search & Filter Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-          {/* Search Box */}
-          <div className="relative flex-1">
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {/* Top Banner & Title */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <BookOpen className="w-7 h-7 text-blue-600" />
+            <span>Historial y Convocatorias de Capacitación</span>
+          </h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Consulta eventos registrados, inscríbete como participante o exporta reportes en Excel y PDF.
+          </p>
+        </div>
+
+        {/* Global Summary Badge */}
+        <div className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-2xl shadow-sm text-xs font-semibold self-start sm:self-auto">
+          <Award className="w-4 h-4 text-amber-400" />
+          <span>{eventos.length} Eventos Publicados</span>
+          <span className="text-slate-400">•</span>
+          <span className="text-emerald-400">{misInscripcionesCount} Inscritos por ti</span>
+        </div>
+      </div>
+
+      {/* Success Notification */}
+      {enrollSuccess && (
+        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center justify-between gap-3 shadow-md animate-fade-in">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+            <span className="font-bold text-sm">{enrollSuccess}</span>
+          </div>
+          <button onClick={() => setEnrollSuccess(null)} className="text-slate-400 hover:text-slate-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* TABS FOR FILTERING: ALL vs MY ENROLLMENTS vs AVAILABLE */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+        <button
+          onClick={() => setActiveTab('todos')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'todos'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          <span>Todos los Eventos ({eventos.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('mis_inscripciones')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'mis_inscripciones'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+          }`}
+        >
+          <BookmarkCheck className="w-4 h-4" />
+          <span>Mis Convocatorias Inscritas ({misInscripcionesCount})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('disponibles')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'disponibles'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+          }`}
+        >
+          <UserPlus className="w-4 h-4" />
+          <span>Capacitaciones Disponibles para Unirse ({disponiblesCount})</span>
+        </button>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+        <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+          {/* Search Input */}
+          <div className="relative w-full md:w-96">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
+              placeholder="Buscar por evento, instructor, participante..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por evento, instructor, colega participante, No. Empleado o depto..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-300 text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
             />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
           </div>
 
-          {/* Filters & Batch Export */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-600">
-              <Filter className="w-3.5 h-3.5 text-blue-600" />
-              <span>Tipo:</span>
-              <select
-                value={filterTipo}
-                onChange={(e) => setFilterTipo(e.target.value)}
-                className="bg-transparent font-semibold text-slate-900 focus:outline-none cursor-pointer"
-              >
-                <option value="todos">Todos</option>
-                <option value="Capacitación">Capacitación</option>
-                <option value="Reunión de Trabajo">Reunión de Trabajo</option>
-              </select>
-            </div>
+          {/* Quick Filters */}
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+            <select
+              value={filterTipo}
+              onChange={(e) => setFilterTipo(e.target.value)}
+              className="px-3 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white font-medium cursor-pointer"
+            >
+              <option value="todos">Todos los Tipos</option>
+              <option value="Capacitación">Solo Capacitaciones</option>
+              <option value="Reunión de Trabajo">Solo Reuniones</option>
+            </select>
 
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-600">
-              <span>Modalidad:</span>
-              <select
-                value={filterModalidad}
-                onChange={(e) => setFilterModalidad(e.target.value)}
-                className="bg-transparent font-semibold text-slate-900 focus:outline-none cursor-pointer"
-              >
-                <option value="todos">Todas</option>
-                <option value="MM">MM (Macro)</option>
-                <option value="OP">OP (Oficina)</option>
-                <option value="Campo">Campo</option>
-              </select>
-            </div>
+            <select
+              value={filterModalidad}
+              onChange={(e) => setFilterModalidad(e.target.value)}
+              className="px-3 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white font-medium cursor-pointer"
+            >
+              <option value="todos">Todas las Modalidades</option>
+              <option value="MM">Modalidad MM</option>
+              <option value="OP">Modalidad OP</option>
+              <option value="Campo">Modalidad Campo</option>
+            </select>
 
-            {/* Global Export Buttons */}
+            {/* Cloud Sync Button */}
             <button
               onClick={handleSyncToSupabase}
               disabled={isSyncing || eventos.length === 0}
-              className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-all flex items-center gap-1.5 shadow-2xs disabled:opacity-50"
-              title="Guardar y Sincronizar todos los eventos con la base de datos Supabase Cloud"
+              className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-all flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+              title="Guardar y Sincronizar todos los eventos con Supabase"
             >
               <Database className={`w-3.5 h-3.5 text-emerald-400 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Sincronizando...' : 'Guardar en Supabase'}</span>
             </button>
 
+            {/* Global Export Buttons */}
             <button
               onClick={() => exportAllEventosToExcel(filteredEventos)}
-              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs"
+              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
               title="Exportar todos los eventos a Excel (.xlsx)"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5" /> Excel (.xlsx)
+              <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
             </button>
 
             <button
               onClick={() => exportAllEventosToPdf(filteredEventos)}
-              className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs"
+              className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
               title="Exportar todos los eventos a PDF (.pdf)"
             >
-              <FileText className="w-3.5 h-3.5" /> PDF (.pdf)
+              <FileText className="w-3.5 h-3.5" /> PDF
             </button>
           </div>
         </div>
@@ -302,132 +456,293 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
         {filteredEventos.length === 0 ? (
           <div className="bg-white p-12 text-center rounded-2xl border border-slate-200/80 space-y-3">
             <Users className="w-12 h-12 text-slate-300 mx-auto" />
-            <h3 className="font-bold text-slate-700 text-base">No se encontraron eventos registrados</h3>
+            <h3 className="font-bold text-slate-700 text-base">No se encontraron eventos en esta vista</h3>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Pruebe a cambiar los filtros de búsqueda o registre un nuevo evento en el módulo "Registro de Participantes".
+              Prueba cambiando la pestaña de filtro o buscando con otro término.
             </p>
           </div>
         ) : (
-          filteredEventos.map((evt) => (
-            <div
-              key={evt.id}
-              className="bg-white rounded-2xl border border-slate-200/90 hover:border-blue-300 shadow-2xs hover:shadow-md transition-all p-6 space-y-4"
-            >
-              {/* Event Header */}
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-200">
-                      {evt.id}
-                    </span>
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                      {evt.tipoEvento}
-                    </span>
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
-                      Modalidad {evt.ubicacionModalidad}
-                    </span>
+          filteredEventos.map((evt) => {
+            const enrolled = isUserEnrolled(evt);
+
+            return (
+              <div
+                key={evt.id}
+                className={`bg-white rounded-2xl border shadow-2xs hover:shadow-md transition-all p-6 space-y-4 ${
+                  enrolled ? 'border-emerald-300 bg-emerald-50/20' : 'border-slate-200/90 hover:border-blue-300'
+                }`}
+              >
+                {/* Event Header */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-200">
+                        {evt.id}
+                      </span>
+                      <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                        {evt.tipoEvento}
+                      </span>
+                      <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
+                        Modalidad {evt.ubicacionModalidad}
+                      </span>
+
+                      {/* Enrolled Badge */}
+                      {enrolled ? (
+                        <span className="text-xs font-bold px-3 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Inscrito / Asistencia Confirmada</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                          Convocatoria Abierta
+                        </span>
+                      )}
+                    </div>
+
+                    <h3 className="text-lg font-bold text-slate-900 leading-snug">
+                      {evt.nombreEvento}
+                    </h3>
                   </div>
-                  <h3 className="text-lg font-bold text-slate-900 leading-snug">
-                    {evt.nombreEvento}
-                  </h3>
-                </div>
 
-                <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
-                  <button
-                    onClick={() => setSelectedEvento(evt)}
-                    className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs"
-                  >
-                    <Eye className="w-3.5 h-3.5" /> Ver Detalle
-                  </button>
-                  <button
-                    onClick={() => exportEventoToExcel(evt)}
-                    title="Exportar este evento a Excel (.xlsx)"
-                    className="px-2.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold transition-colors flex items-center gap-1"
-                  >
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Excel
-                  </button>
-                  <button
-                    onClick={() => exportEventoToPdf(evt)}
-                    title="Exportar este evento a PDF (.pdf)"
-                    className="px-2.5 py-2 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-semibold transition-colors flex items-center gap-1"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-blue-600" /> PDF
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (confirm(`¿Eliminar de forma permanente el registro ${evt.id}?`)) {
-                        onDeleteEvento(evt.id);
-                      }
-                    }}
-                    title="Eliminar evento"
-                    className="p-2 rounded-xl border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+                  <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
+                    {/* Enroll Action Button */}
+                    {!enrolled ? (
+                      <button
+                        onClick={() => handleOpenEnrollModal(evt)}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm animate-pulse cursor-pointer"
+                        title="Inscribirme y aceptar participar en este evento de capacitación"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        <span>Aceptar Participar</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => exportEventoToPdf(evt)}
+                        className="px-3.5 py-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                        title="Descargar Constancia / Lista de Participación"
+                      >
+                        <Award className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Mi Ficha</span>
+                      </button>
+                    )}
 
-              {/* Event Body Info Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600">
-                <div className="space-y-1">
-                  <p className="text-[11px] font-semibold text-slate-400 uppercase">Instructor</p>
-                  <p className="font-bold text-slate-800">{evt.instructor.nombre}</p>
-                  <p className="text-slate-500">
-                    {evt.instructor.tipo === 'Interno'
-                      ? `Interno (${evt.instructor.puesto || 'General'})`
-                      : `Externo (${evt.instructor.empresa || 'Proveedor'})`}
-                  </p>
-                </div>
-
-                <div className="space-y-1">
-                  <p className="text-[11px] font-semibold text-slate-400 uppercase">Fechas y Horas</p>
-                  <p className="font-medium text-slate-800">
-                    {evt.fechaInicio} al {evt.fechaTermino} ({evt.noDias} días)
-                  </p>
-                  <p className="text-slate-500">
-                    {evt.horasCapacitacion} hrs totales • {evt.horasHombreCapacitacion} hrs-hombre
-                  </p>
-                </div>
-
-                <div className="space-y-1">
-                  <p className="text-[11px] font-semibold text-slate-400 uppercase">Métricas Asistencia</p>
-                  <p className="font-bold text-slate-900 text-sm">
-                    {evt.totalParticipantes} Participantes Registrados
-                  </p>
-                  <p className="text-slate-500">
-                    Hombres: <span className="text-blue-600 font-bold">{evt.hombresCount}</span> | Mujeres:{' '}
-                    <span className="text-pink-600 font-bold">{evt.mujeresCount}</span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Participants Preview Pills */}
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-1.5 overflow-x-auto py-1 max-w-full">
-                  <span className="text-[11px] text-slate-400 shrink-0 font-medium">Asistentes:</span>
-                  {evt.participantes.slice(0, 5).map((p) => (
-                    <span
-                      key={p.id}
-                      className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 shrink-0 border border-slate-200/80"
+                    <button
+                      onClick={() => setSelectedEvento(evt)}
+                      className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
                     >
-                      {p.nombre}
-                    </span>
-                  ))}
-                  {evt.participantes.length > 5 && (
-                    <span className="text-[11px] font-semibold text-blue-600 shrink-0">
-                      +{evt.participantes.length - 5} más
-                    </span>
-                  )}
+                      <Eye className="w-3.5 h-3.5" /> Ver Detalle
+                    </button>
+
+                    <button
+                      onClick={() => exportEventoToExcel(evt)}
+                      title="Exportar este evento a Excel (.xlsx)"
+                      className="px-2.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Excel
+                    </button>
+
+                    <button
+                      onClick={() => exportEventoToPdf(evt)}
+                      title="Exportar este evento a PDF (.pdf)"
+                      className="px-2.5 py-2 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-blue-600" /> PDF
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (confirm(`¿Eliminar de forma permanente el registro ${evt.id}?`)) {
+                          onDeleteEvento(evt.id);
+                        }
+                      }}
+                      title="Eliminar evento"
+                      className="p-2 rounded-xl border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
-                <span className="text-xs font-semibold text-slate-500 shrink-0 ml-2">
-                  Costos: <strong className="text-emerald-700">${evt.costos.totalCostos.toLocaleString('es-MX')}</strong>
-                </span>
+                {/* Event Body Info Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600">
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase">Instructor</p>
+                    <p className="font-bold text-slate-800">{evt.instructor.nombre}</p>
+                    <p className="text-slate-500">
+                      {evt.instructor.tipo === 'Interno'
+                        ? `Interno (${evt.instructor.puesto || 'General'})`
+                        : `Externo (${evt.instructor.empresa || 'Proveedor'})`}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase">Fechas y Horas</p>
+                    <p className="font-medium text-slate-800">
+                      {evt.fechaInicio} al {evt.fechaTermino} ({evt.noDias} días)
+                    </p>
+                    <p className="text-slate-500">
+                      {evt.horasCapacitacion} hrs totales • {evt.horasHombreCapacitacion} hrs-hombre
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase">Métricas Asistencia</p>
+                    <p className="font-bold text-slate-900 text-sm">
+                      {evt.totalParticipantes} Participantes Registrados
+                    </p>
+                    <p className="text-slate-500">
+                      Hombres: <span className="text-blue-600 font-bold">{evt.hombresCount}</span> | Mujeres:{' '}
+                      <span className="text-pink-600 font-bold">{evt.mujeresCount}</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Participants Preview Pills */}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 overflow-x-auto py-1 max-w-full">
+                    <span className="text-[11px] text-slate-400 shrink-0 font-medium">Asistentes:</span>
+                    {evt.participantes.slice(0, 5).map((p) => (
+                      <span
+                        key={p.id}
+                        className={`text-[11px] px-2 py-0.5 rounded-full shrink-0 border ${
+                          userProfile && (p.email === userProfile.email || p.nombre === userProfile.nombre)
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold'
+                            : 'bg-slate-100 text-slate-700 border-slate-200/80'
+                        }`}
+                      >
+                        {p.nombre} {userProfile && p.email === userProfile.email ? '(Tú)' : ''}
+                      </span>
+                    ))}
+                    {evt.participantes.length > 5 && (
+                      <span className="text-[11px] font-semibold text-blue-600 shrink-0">
+                        +{evt.participantes.length - 5} más
+                      </span>
+                    )}
+                  </div>
+
+                  <span className="text-xs font-semibold text-slate-500 shrink-0 ml-2">
+                    Costos: <strong className="text-emerald-700">${evt.costos.totalCostos.toLocaleString('es-MX')}</strong>
+                  </span>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
+
+      {/* PARTICIPANT ENROLLMENT MODAL */}
+      {enrollingEvento && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden space-y-4">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-emerald-700 to-teal-800 text-white p-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center font-bold">
+                  <UserPlus className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">Inscripción y Aceptación de Participación</h3>
+                  <p className="text-xs text-emerald-100">{enrollingEvento.nombreEvento}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEnrollingEvento(null)}
+                className="text-emerald-200 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleConfirmEnrollment} className="p-6 space-y-4 text-xs">
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 space-y-1">
+                <p className="font-bold">Datos del Participante (Registrado en el Sistema):</p>
+                <p>
+                  <strong>Nombre:</strong> {userProfile?.nombre} • <strong>Correo:</strong> {userProfile?.email}
+                </p>
+                <p>
+                  <strong>Evento:</strong> {enrollingEvento.nombreEvento} ({enrollingEvento.horasCapacitacion} hrs)
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block font-bold text-slate-700">No. de Empleado / ID</label>
+                  <input
+                    type="text"
+                    required
+                    value={enrollNoEmp}
+                    onChange={(e) => setEnrollNoEmp(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-bold text-slate-700">Género</label>
+                  <select
+                    value={enrollGenero}
+                    onChange={(e) => setEnrollGenero(e.target.value as 'H' | 'M')}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
+                  >
+                    <option value="H">Hombre (H)</option>
+                    <option value="M">Mujer (M)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-bold text-slate-700">Puesto</label>
+                  <input
+                    type="text"
+                    required
+                    value={enrollPuesto}
+                    onChange={(e) => setEnrollPuesto(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-bold text-slate-700">Departamento</label>
+                  <input
+                    type="text"
+                    required
+                    value={enrollDepto}
+                    onChange={(e) => setEnrollDepto(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Digital Signature */}
+              <div className="space-y-1 pt-1">
+                <label className="block font-bold text-slate-700 flex items-center justify-between">
+                  <span>Firma Digital de Asistencia (Opcional)</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Dibuja o confirma directamente</span>
+                </label>
+                <div className="border border-slate-300 rounded-xl overflow-hidden bg-slate-50">
+                  <SignatureCanvas onSave={(sig) => setEnrollFirma(sig)} initialSignature={enrollFirma} />
+                </div>
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setEnrollingEvento(null)}
+                  className="px-4 py-2 rounded-xl border text-slate-600 font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-all shadow-md flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Confirmar mi Asistencia</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* FULL INSPECTION MODAL */}
       {selectedEvento && (
@@ -443,11 +758,25 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                   <span className="text-xs text-slate-300 font-medium">
                     {selectedEvento.tipoEvento} • Modalidad {selectedEvento.ubicacionModalidad}
                   </span>
+                  {isUserEnrolled(selectedEvento) && (
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-900 text-emerald-300 border border-emerald-700">
+                      ✓ Estás inscrito
+                    </span>
+                  )}
                 </div>
                 <h3 className="text-lg font-bold text-white">{selectedEvento.nombreEvento}</h3>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                {!isUserEnrolled(selectedEvento) && (
+                  <button
+                    onClick={() => handleOpenEnrollModal(selectedEvento)}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" /> Inscribirme
+                  </button>
+                )}
+
                 <button
                   onClick={handlePrintEvent}
                   className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors flex items-center gap-1.5 border border-slate-700"
@@ -458,13 +787,13 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                   onClick={() => exportEventoToExcel(selectedEvento)}
                   className="px-3 py-1.5 rounded-lg bg-emerald-900/60 hover:bg-emerald-800 text-emerald-200 text-xs font-medium transition-colors flex items-center gap-1.5 border border-emerald-700/60"
                 >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" /> Exportar Excel
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" /> Excel
                 </button>
                 <button
                   onClick={() => exportEventoToPdf(selectedEvento)}
                   className="px-3 py-1.5 rounded-lg bg-blue-900/60 hover:bg-blue-800 text-blue-200 text-xs font-medium transition-colors flex items-center gap-1.5 border border-blue-700/60"
                 >
-                  <FileText className="w-3.5 h-3.5 text-blue-400" /> Exportar PDF
+                  <FileText className="w-3.5 h-3.5 text-blue-400" /> PDF
                 </button>
                 <button
                   onClick={() => setSelectedEvento(null)}
@@ -506,62 +835,77 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                 </div>
               </div>
 
-              {/* Attendance Table Section */}
+              {/* Participants Section */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-bold text-base text-slate-900">
-                      Lista de Asistencia Registrada ({selectedEvento.participantes.length} Colegas)
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      Desglose: {selectedEvento.hombresCount} Hombres | {selectedEvento.mujeresCount} Mujeres
-                    </p>
-                  </div>
+                  <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                    <Users className="w-4 h-4 text-blue-600" />
+                    <span>Lista de Participantes ({selectedEvento.participantes.length})</span>
+                  </h4>
 
                   <button
                     onClick={() => setShowAddParticipantModal(true)}
-                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs"
+                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1"
                   >
                     <Plus className="w-3.5 h-3.5" /> Agregar Participante
                   </button>
                 </div>
 
-                <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider">
-                        <th className="py-2.5 px-3 text-center w-12">Pos</th>
-                        <th className="py-2.5 px-3">No. EMP</th>
-                        <th className="py-2.5 px-3">Nombre Completo</th>
-                        <th className="py-2.5 px-3 text-center">Género</th>
-                        <th className="py-2.5 px-3">Puesto</th>
-                        <th className="py-2.5 px-3">Departamento</th>
-                        <th className="py-2.5 px-3 text-center">Firma Digital</th>
+                <div className="border border-slate-200 rounded-xl overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="p-3 w-12 text-center">#</th>
+                        <th className="p-3">No. Emp</th>
+                        <th className="p-3">Nombre Completo</th>
+                        <th className="p-3 text-center">Género</th>
+                        <th className="p-3">Puesto</th>
+                        <th className="p-3">Departamento</th>
+                        <th className="p-3 text-center">Firma</th>
+                        <th className="p-3 text-right">Acción</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white">
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
                       {selectedEvento.participantes.map((p) => (
-                        <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-2 px-3 text-center font-bold text-slate-500">{p.pos}</td>
-                          <td className="py-2 px-3 font-mono font-medium text-slate-700">{p.noEmp}</td>
-                          <td className="py-2 px-3 font-semibold text-slate-900">{p.nombre}</td>
-                          <td className="py-2 px-3 text-center">
+                        <tr key={p.id} className="hover:bg-slate-50">
+                          <td className="p-3 text-center font-bold text-slate-400">{p.pos}</td>
+                          <td className="p-3 font-mono font-semibold text-slate-900">{p.noEmp}</td>
+                          <td className="p-3 font-medium text-slate-900">
+                            {p.nombre}
+                            {userProfile && (p.email === userProfile.email || p.nombre === userProfile.nombre) && (
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                                Tú
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-center">
                             <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                p.genero === 'H'
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : 'bg-pink-100 text-pink-700'
+                              className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                p.genero === 'H' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'
                               }`}
                             >
                               {p.genero}
                             </span>
                           </td>
-                          <td className="py-2 px-3 text-slate-600">{p.puesto}</td>
-                          <td className="py-2 px-3 text-slate-600">{p.depto}</td>
-                          <td className="py-2 px-3 text-center">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              ✓ Registrado
-                            </span>
+                          <td className="p-3">{p.puesto}</td>
+                          <td className="p-3">{p.depto}</td>
+                          <td className="p-3 text-center">
+                            {p.firma ? (
+                              <span className="text-emerald-600 font-semibold text-[11px] flex items-center justify-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Registrada
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-[11px]">Pendiente</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">
+                            <button
+                              onClick={() => handleDeleteParticipant(p.id)}
+                              className="text-rose-500 hover:text-rose-700 p-1"
+                              title="Eliminar de la lista"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -569,138 +913,97 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                   </table>
                 </div>
               </div>
-
-              {/* Financial & Content Breakdown */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                <div className="p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
-                  <h4 className="font-bold text-slate-900 uppercase text-[11px]">
-                    Desglose de Costos del Evento
-                  </h4>
-                  <ul className="space-y-1 text-slate-600">
-                    <li className="flex justify-between">
-                      <span>Costo Instructor:</span> <strong>${selectedEvento.costos.costoInstructor.toLocaleString()}</strong>
-                    </li>
-                    <li className="flex justify-between">
-                      <span>Costo Materiales:</span> <strong>${selectedEvento.costos.costoMateriales.toLocaleString()}</strong>
-                    </li>
-                    <li className="flex justify-between">
-                      <span>Costo Cafetería:</span> <strong>${selectedEvento.costos.costoCafeteria.toLocaleString()}</strong>
-                    </li>
-                    <li className="flex justify-between">
-                      <span>Otros Costos:</span> <strong>${selectedEvento.costos.otrosCostos.toLocaleString()}</strong>
-                    </li>
-                    <li className="flex justify-between border-t pt-1 font-bold text-slate-900 text-sm">
-                      <span>Total:</span> <span className="text-emerald-700">${selectedEvento.costos.totalCostos.toLocaleString()} MXN</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
-                  <h4 className="font-bold text-slate-900 uppercase text-[11px]">
-                    Contenido & Aprobación RH
-                  </h4>
-                  <p className="text-slate-700">{selectedEvento.contenidoTematico || 'Sin resumen temático.'}</p>
-                  <p className="text-slate-500 font-medium">
-                    Anexo: {selectedEvento.anexoContenido ? '✓ Se adjunta temario' : 'No adjunto'}
-                  </p>
-                  <div className="pt-2 flex items-center justify-between text-emerald-800 font-semibold bg-emerald-50 p-2 rounded-lg border border-emerald-200">
-                    <span>Aprobación Recursos Humanos (RH)</span>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL: Add Participant to Current Event */}
-      {showAddParticipantModal && selectedEvento && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4">
+      {/* MANUAL ADD PARTICIPANT MODAL */}
+      {showAddParticipantModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4 border border-slate-200">
             <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="font-bold text-slate-900 text-base">Agregar Colega Participante</h3>
+              <h3 className="font-bold text-slate-900 text-base">Registrar Participante</h3>
               <button
                 onClick={() => setShowAddParticipantModal(false)}
                 className="text-slate-400 hover:text-slate-600"
               >
-                <X className="w-5 h-5" />
+                ✕
               </button>
             </div>
 
-            <form onSubmit={handleAddParticipantToCurrentEvent} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Número de Empleado (No. EMP)</label>
-                <input
-                  type="text"
-                  value={newNoEmp}
-                  onChange={(e) => setNewNoEmp(e.target.value)}
-                  placeholder="Ej: EMP-1050"
-                  className="w-full px-3 py-2 rounded-lg border text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Nombre del Colega <span className="text-rose-500">*</span>
-                </label>
+            <form onSubmit={handleAddParticipant} className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="block font-semibold text-slate-700">No. de Empleado</label>
                 <input
                   type="text"
                   required
-                  value={newNombre}
-                  onChange={(e) => setNewNombre(e.target.value)}
-                  placeholder="Nombre completo"
-                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  placeholder="Ej. EMP-1050"
+                  value={newNoEmp}
+                  onChange={(e) => setNewNoEmp(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Género</label>
-                  <select
-                    value={newGenero}
-                    onChange={(e) => setNewGenero(e.target.value as 'H' | 'M')}
-                    className="w-full px-3 py-2 rounded-lg border text-sm bg-white"
-                  >
-                    <option value="H">Hombre (H)</option>
-                    <option value="M">Mujer (M)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Departamento</label>
-                  <input
-                    type="text"
-                    value={newDepto}
-                    onChange={(e) => setNewDepto(e.target.value)}
-                    placeholder="Ej. Operaciones"
-                    className="w-full px-3 py-2 rounded-lg border text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Puesto</label>
+              <div className="space-y-1">
+                <label className="block font-semibold text-slate-700">Nombre Completo</label>
                 <input
                   type="text"
-                  value={newPuesto}
-                  onChange={(e) => setNewPuesto(e.target.value)}
-                  placeholder="Ej. Técnico Especialista"
-                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  required
+                  placeholder="Nombre del participante"
+                  value={newNombre}
+                  onChange={(e) => setNewNombre(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs"
                 />
               </div>
 
-              <div className="pt-3 flex justify-end gap-2">
+              <div className="space-y-1">
+                <label className="block font-semibold text-slate-700">Género</label>
+                <select
+                  value={newGenero}
+                  onChange={(e) => setNewGenero(e.target.value as 'H' | 'M')}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white"
+                >
+                  <option value="H">Hombre (H)</option>
+                  <option value="M">Mujer (M)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block font-semibold text-slate-700">Puesto</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Puesto u ocupación"
+                  value={newPuesto}
+                  onChange={(e) => setNewPuesto(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block font-semibold text-slate-700">Departamento</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Departamento o área"
+                  value={newDepto}
+                  onChange={(e) => setNewDepto(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t">
                 <button
                   type="button"
                   onClick={() => setShowAddParticipantModal(false)}
-                  className="px-4 py-2 rounded-lg border text-slate-600 font-medium"
+                  className="px-4 py-2 rounded-xl border text-slate-600 font-semibold"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold"
+                  className="px-5 py-2 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition-colors"
                 >
                   Guardar Participante
                 </button>
