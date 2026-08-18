@@ -12,13 +12,9 @@ import {
   EyeOff,
   LogIn,
   UserPlus,
-  Sparkles,
   CheckCircle2,
   AlertCircle,
   Database,
-  ArrowRight,
-  Shield,
-  Zap,
 } from 'lucide-react';
 import { UserProfile, UserRole } from '../../types';
 import {
@@ -26,13 +22,13 @@ import {
   signUpWithSupabase,
   SUPABASE_PROJECT_CONFIG,
 } from '../../lib/supabase';
-import { DEMO_PRESET_USERS } from '../../utils/storage';
 
 interface AuthModalProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose?: () => void;
   onLoginSuccess: (user: UserProfile) => void;
   currentEmail?: string;
+  allowClose?: boolean;
 }
 
 const AVAILABLE_ROLES: { value: UserRole; label: string; desc: string }[] = [
@@ -73,14 +69,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onLoginSuccess,
   currentEmail = '',
+  allowClose = true,
 }) => {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
   // Login Form States
-  const [loginEmail, setLoginEmail] = useState(
-    currentEmail || 'registrodeparticipantes@appdesignsoftware.com'
-  );
-  const [loginPassword, setLoginPassword] = useState('123456');
+  const [loginEmail, setLoginEmail] = useState(currentEmail || '');
+  const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPass, setShowLoginPass] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
@@ -102,53 +97,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Handle Login Submit
+  // Handle Login Submit strictly with credentials
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+
+    if (!loginEmail.trim()) {
+      setLoginError('Por favor ingresa tu correo electrónico.');
+      return;
+    }
+    if (!loginPassword) {
+      setLoginError('Por favor ingresa tu contraseña de acceso.');
+      return;
+    }
+
     setLoginLoading(true);
 
     try {
-      // 1. Try Supabase Auth
+      // Authenticate with Supabase Auth
       const res = await signInWithSupabase(loginEmail, loginPassword);
 
       if (res.success && res.user) {
         onLoginSuccess(res.user);
-        onClose();
+        if (onClose) onClose();
         return;
       }
 
-      // 2. Check if it matches a preset demo user
-      const matchedDemo = DEMO_PRESET_USERS.find(
-        (u) => u.email.toLowerCase() === loginEmail.trim().toLowerCase()
+      setLoginError(
+        res.error ||
+          'Credenciales incorrectas. Verifica tu correo y contraseña o crea una cuenta.'
       );
-
-      if (matchedDemo) {
-        onLoginSuccess(matchedDemo);
-        onClose();
-        return;
-      }
-
-      // 3. Fallback: Create dynamic local profile from email
-      const dynamicUser: UserProfile = {
-        nombre: loginEmail.split('@')[0].replace('.', ' ').toUpperCase(),
-        email: loginEmail.trim().toLowerCase(),
-        puesto: 'Coordinador de Capacitación',
-        departamento: 'Desarrollo Organizacional',
-        rfc: 'XAXX010101000',
-        telefono: '+52 (55) 0000-0000',
-        rol: 'Coordinador de Capacitación',
-        avatarUrl:
-          'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
-        fechaIngreso: new Date().toISOString().split('T')[0],
-        notificacionesEmail: true,
-        modoOscuro: false,
-      };
-
-      onLoginSuccess(dynamicUser);
-      onClose();
     } catch (err: any) {
-      setLoginError(err?.message || 'Error al iniciar sesión.');
+      setLoginError(err?.message || 'Error al conectar con el servidor de autenticación.');
     } finally {
       setLoginLoading(false);
     }
@@ -181,9 +161,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         rol: regRol,
       });
 
-      if (!res.success && res.error && !res.error.includes('already registered')) {
-        // Continue with local registration if Supabase tables/auth are not yet configured
-        console.warn('Supabase sign up warning:', res.error);
+      if (!res.success && res.error) {
+        setRegError(res.error);
+        setRegLoading(false);
+        return;
       }
 
       const newUser: UserProfile = res.user || {
@@ -204,21 +185,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setRegSuccess(true);
       setTimeout(() => {
         onLoginSuccess(newUser);
-        onClose();
-      }, 1200);
+        if (onClose) onClose();
+      }, 1000);
     } catch (err: any) {
-      setRegError(err?.message || 'Error al crear la cuenta.');
+      setRegError(err?.message || 'Error al crear la cuenta en Supabase.');
     } finally {
       setRegLoading(false);
     }
-  };
-
-  // Quick Demo User Selector
-  const handleSelectDemoUser = (user: UserProfile) => {
-    setLoginEmail(user.email);
-    setLoginPassword('password123');
-    onLoginSuccess(user);
-    onClose();
   };
 
   return (
@@ -230,10 +203,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <ShieldCheck className="w-6 h-6" />
           </div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-            Control de Acceso y Capacitación
+            Autenticación de Usuarios
           </h2>
           <p className="text-xs text-slate-300 mt-1 max-w-sm mx-auto">
-            Autenticación segura con Supabase Cloud y gestión de roles
+            Ingreso exclusivo mediante credenciales registradas
           </p>
 
           {/* Mode Switch Tabs */}
@@ -244,7 +217,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 setAuthMode('login');
                 setLoginError('');
               }}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 authMode === 'login'
                   ? 'bg-blue-600 text-white shadow-md'
                   : 'text-slate-300 hover:text-white'
@@ -258,7 +231,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 setAuthMode('register');
                 setRegError('');
               }}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 authMode === 'register'
                   ? 'bg-blue-600 text-white shadow-md'
                   : 'text-slate-300 hover:text-white'
@@ -275,7 +248,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {authMode === 'login' && (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               {loginError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>{loginError}</span>
                 </div>
@@ -329,39 +302,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <LogIn className="w-4 h-4" />
                 {loginLoading ? 'Verificando Credenciales...' : 'Ingresar al Sistema'}
               </button>
-
-              {/* Quick Demo Accounts Selection */}
-              <div className="pt-4 border-t border-slate-200/80 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                    <Zap className="w-3 h-3 text-amber-500" /> Acceso Rápido / Cuentas Demo:
-                  </span>
-                  <span className="text-[10px] text-slate-400">1-clic para probar</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {DEMO_PRESET_USERS.map((demo, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleSelectDemoUser(demo)}
-                      className="p-2.5 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 text-left transition-all flex items-center gap-2.5 group"
-                    >
-                      <img
-                        src={demo.avatarUrl}
-                        alt={demo.nombre}
-                        className="w-8 h-8 rounded-lg object-cover border"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-slate-800 truncate group-hover:text-blue-700">
-                          {demo.nombre.split(' ')[0]} {demo.nombre.split(' ')[1]}
-                        </p>
-                        <p className="text-[10px] text-slate-500 truncate">{demo.rol}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </form>
           )}
 
@@ -369,14 +309,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {authMode === 'register' && (
             <form onSubmit={handleRegisterSubmit} className="space-y-4">
               {regSuccess && (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>¡Cuenta creada con éxito! Ingresando al panel...</span>
+                  <span>¡Cuenta creada con éxito! Iniciando sesión...</span>
                 </div>
               )}
 
               {regError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>{regError}</span>
                 </div>
@@ -409,7 +349,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     placeholder="usuario@empresa.com"
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
                   />
                 </div>
 
@@ -453,7 +393,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     placeholder="XAXX010101000"
                     value={regRfc}
                     onChange={(e) => setRegRfc(e.target.value.toUpperCase())}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 text-sm uppercase focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 text-sm uppercase focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
                   />
                 </div>
 
@@ -487,9 +427,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       </option>
                     ))}
                   </select>
-                  <p className="text-[11px] text-slate-500">
-                    * Podrás cambiar o reasignar roles posteriormente mediante consultas SQL en Supabase o desde el panel de administración.
-                  </p>
                 </div>
 
                 {/* Password */}
@@ -539,7 +476,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
               >
                 <UserPlus className="w-4 h-4" />
-                {regLoading ? 'Registrando en Supabase...' : 'Registrar Cuenta y Entrar'}
+                {regLoading ? 'Registrando en Supabase...' : 'Crear Cuenta y Entrar'}
               </button>
             </form>
           )}
@@ -548,18 +485,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Modal Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
           <span className="flex items-center gap-1.5">
-            <Database className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Supabase: {SUPABASE_PROJECT_CONFIG.projectId}</span>
+            <Database className="w-3.5 h-3.5 text-blue-600" />
+            <span>Supabase Auth</span>
           </span>
 
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold transition-colors"
-          >
-            Continuar como Invitado
-          </button>
+          {allowClose && onClose && (
+            <button
+              onClick={onClose}
+              className="px-4 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold transition-colors cursor-pointer"
+            >
+              Cerrar
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 };
+

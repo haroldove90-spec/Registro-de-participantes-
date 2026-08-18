@@ -12,65 +12,6 @@ const STORAGE_KEY_EVENTOS = 'registro_participantes_eventos_v1';
 const STORAGE_KEY_PROFILE = 'registro_participantes_profile_v1';
 const STORAGE_KEY_SESSION = 'registro_participantes_auth_session_v1';
 
-export const DEMO_PRESET_USERS: UserProfile[] = [
-  {
-    nombre: 'Lic. Ana Gabriela Mendoza',
-    email: 'registrodeparticipantes@appdesignsoftware.com',
-    puesto: 'Coordinadora de Desarrollo Organizacional & Capacitación',
-    departamento: 'Recursos Humanos y Formación Continua',
-    rfc: 'MEGA890412HR4',
-    telefono: '+52 (55) 8492-3021',
-    rol: 'Administrador de Capacitación',
-    avatarUrl:
-      'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
-    fechaIngreso: '2021-03-15',
-    notificacionesEmail: true,
-    modoOscuro: false,
-  },
-  {
-    nombre: 'Ing. Carlos Alberto Morales',
-    email: 'carlos.morales@empresa.com',
-    puesto: 'Instructor Senior de Seguridad y Procesos',
-    departamento: 'Operaciones y Seguridad Industrial',
-    rfc: 'MOAC801122TR9',
-    telefono: '+52 (55) 5543-9821',
-    rol: 'Instructor / Capacitador',
-    avatarUrl:
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
-    fechaIngreso: '2019-06-01',
-    notificacionesEmail: true,
-    modoOscuro: false,
-  },
-  {
-    nombre: 'Lic. Mariana Valdez Torres',
-    email: 'mariana.valdez@empresa.com',
-    puesto: 'Especialista en Talento y Compensaciones',
-    departamento: 'Recursos Humanos (RH)',
-    rfc: 'VATM920815KM1',
-    telefono: '+52 (55) 7821-4309',
-    rol: 'Recursos Humanos (RH)',
-    avatarUrl:
-      'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&auto=format&fit=crop&q=80',
-    fechaIngreso: '2022-01-10',
-    notificacionesEmail: true,
-    modoOscuro: false,
-  },
-  {
-    nombre: 'Ing. Roberto Hernández Ruiz',
-    email: 'roberto.hernandez@empresa.com',
-    puesto: 'Supervisor de Planta y Coordinador de Turno',
-    departamento: 'Producción y Mantenimiento',
-    rfc: 'HERR850320LL3',
-    telefono: '+52 (55) 3210-9876',
-    rol: 'Coordinador de Capacitación',
-    avatarUrl:
-      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=80',
-    fechaIngreso: '2018-09-20',
-    notificacionesEmail: true,
-    modoOscuro: false,
-  },
-];
-
 export function getStoredEventos(): EventoData[] {
   try {
     const data = localStorage.getItem(STORAGE_KEY_EVENTOS);

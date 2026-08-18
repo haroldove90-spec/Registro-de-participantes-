@@ -1,13 +1,13 @@
 import React from 'react';
 import { UserProfile, ModuleType } from '../../types';
-import { ClipboardList, History, BarChart3, User, Building2, ShieldCheck, ChevronRight, Sparkles, LogIn } from 'lucide-react';
+import { ClipboardList, History, BarChart3, User, Building2, ShieldCheck, ChevronRight, Sparkles, LogOut } from 'lucide-react';
 
 interface SidebarProps {
   activeModule: ModuleType;
   setActiveModule: (module: ModuleType) => void;
   userProfile: UserProfile;
   totalEventosCount: number;
-  onOpenAuthModal?: () => void;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -15,7 +15,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveModule,
   userProfile,
   totalEventosCount,
-  onOpenAuthModal,
+  onLogout,
 }) => {
   const navItems = [
     {
@@ -75,18 +75,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Role Banner */}
       <div className="mx-4 mt-4 p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 text-xs">
-        <div className="flex items-center justify-between">
-          <div className="text-slate-400 uppercase font-medium tracking-wider text-[10px]">
-            Módulo de Acceso por Rol
-          </div>
-          {onOpenAuthModal && (
-            <button
-              onClick={onOpenAuthModal}
-              className="text-[10px] text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 transition-colors"
-            >
-              <LogIn className="w-3 h-3" /> Acceder
-            </button>
-          )}
+        <div className="text-slate-400 uppercase font-medium tracking-wider text-[10px]">
+          Módulo de Acceso por Rol
         </div>
         <div className="font-semibold text-slate-200 mt-1 flex items-center justify-between">
           <span className="truncate pr-2">{userProfile.rol}</span>
@@ -108,7 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => setActiveModule(item.id)}
-              className={`w-full group flex items-start gap-3 p-3 rounded-xl transition-all text-left relative ${
+              className={`w-full group flex items-start gap-3 p-3 rounded-xl transition-all text-left relative cursor-pointer ${
                 isActive
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 font-medium'
                   : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
@@ -168,11 +158,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </p>
       </div>
 
-      {/* Bottom Profile Footer */}
-      <div className="p-3 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between">
+      {/* Bottom Profile & Logout Footer */}
+      <div className="p-3 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between gap-2">
         <button
           onClick={() => setActiveModule('perfil')}
-          className="flex items-center gap-3 w-full p-2 rounded-lg hover:bg-slate-800/80 transition-colors text-left"
+          className="flex items-center gap-3 flex-1 min-w-0 p-2 rounded-lg hover:bg-slate-800/80 transition-colors text-left cursor-pointer"
         >
           <img
             src={userProfile.avatarUrl}
@@ -184,7 +174,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <p className="text-[11px] text-slate-400 truncate">{userProfile.departamento}</p>
           </div>
         </button>
+
+        {onLogout && (
+          <button
+            type="button"
+            onClick={onLogout}
+            className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 transition-colors cursor-pointer"
+            title="Cerrar Sesión"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </aside>
   );
 };
+

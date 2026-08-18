@@ -9,8 +9,10 @@ import {
   saveStoredUserProfile,
   getStoredAuthSession,
   saveStoredAuthSession,
+  clearStoredAuthSession,
   initializeSupabaseSync,
 } from './utils/storage';
+import { signOutFromSupabase } from './lib/supabase';
 import { Sidebar } from './components/Navigation/Sidebar';
 import { MobileBottomNav } from './components/Navigation/MobileBottomNav';
 import { TopHeader } from './components/Navigation/TopHeader';
@@ -18,7 +20,6 @@ import { RegistroModule } from './components/Modules/RegistroModule';
 import { HistorialModule } from './components/Modules/HistorialModule';
 import { MetricasModule } from './components/Modules/MetricasModule';
 import { PerfilModule } from './components/Modules/PerfilModule';
-import { SupabaseModal } from './components/SupabaseModal';
 import { AuthModal } from './components/Auth/AuthModal';
 
 export default function App() {
@@ -28,7 +29,6 @@ export default function App() {
     const session = getStoredAuthSession();
     return session?.user || getStoredUserProfile();
   });
-  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   // Load initial eventos from storage and synchronize with Supabase Cloud
@@ -75,6 +75,12 @@ export default function App() {
     handleSaveProfile(authenticatedUser);
   };
 
+  const handleLogout = async () => {
+    await signOutFromSupabase();
+    clearStoredAuthSession();
+    setIsAuthModalOpen(true);
+  };
+
   return (
     <div className={`min-h-screen bg-slate-100 text-slate-900 font-sans flex flex-col md:flex-row antialiased ${userProfile.modoOscuro ? 'dark' : ''}`}>
       {/* Left Sidebar for Desktop / Tablet */}
@@ -83,7 +89,7 @@ export default function App() {
         setActiveModule={setActiveModule}
         userProfile={userProfile}
         totalEventosCount={eventos.length}
-        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area */}
@@ -93,8 +99,7 @@ export default function App() {
           activeModule={activeModule}
           setActiveModule={setActiveModule}
           userProfile={userProfile}
-          onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
-          onOpenAuthModal={() => setIsAuthModalOpen(true)}
+          onLogout={handleLogout}
         />
 
         {/* Dynamic Module Body */}
@@ -126,9 +131,8 @@ export default function App() {
               userProfile={userProfile}
               eventos={eventos}
               onSaveProfile={handleSaveProfile}
-              onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
-              onOpenAuthModal={() => setIsAuthModalOpen(true)}
               onNavigateToHistorial={() => setActiveModule('historial')}
+              onLogout={handleLogout}
             />
           )}
         </main>
@@ -141,25 +145,17 @@ export default function App() {
         totalEventosCount={eventos.length}
       />
 
-      {/* Supabase Configuration, SQL and Role Management Modal */}
-      <SupabaseModal
-        isOpen={isSupabaseModalOpen}
-        onClose={() => setIsSupabaseModalOpen(false)}
-        onDataSynced={(syncedEventos, syncedProfile) => {
-          setEventos(syncedEventos);
-          setUserProfile(syncedProfile);
-        }}
-      />
-
       {/* Access Login & Registration Modal */}
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onLoginSuccess={handleLoginSuccess}
         currentEmail={userProfile.email}
+        allowClose={true}
       />
     </div>
   );
 }
+
 
 
