@@ -83,6 +83,7 @@ export default function App() {
         setActiveModule={setActiveModule}
         userProfile={userProfile}
         totalEventosCount={eventos.length}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
       />
 
       {/* Main Content Area */}

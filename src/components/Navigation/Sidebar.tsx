@@ -1,12 +1,13 @@
 import React from 'react';
 import { UserProfile, ModuleType } from '../../types';
-import { ClipboardList, History, BarChart3, User, Building2, ShieldCheck, ChevronRight, Sparkles } from 'lucide-react';
+import { ClipboardList, History, BarChart3, User, Building2, ShieldCheck, ChevronRight, Sparkles, LogIn } from 'lucide-react';
 
 interface SidebarProps {
   activeModule: ModuleType;
   setActiveModule: (module: ModuleType) => void;
   userProfile: UserProfile;
   totalEventosCount: number;
+  onOpenAuthModal?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -14,6 +15,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveModule,
   userProfile,
   totalEventosCount,
+  onOpenAuthModal,
 }) => {
   const navItems = [
     {
@@ -73,12 +75,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Role Banner */}
       <div className="mx-4 mt-4 p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 text-xs">
-        <div className="text-slate-400 uppercase font-medium tracking-wider text-[10px]">
-          Módulo de Acceso por Rol
+        <div className="flex items-center justify-between">
+          <div className="text-slate-400 uppercase font-medium tracking-wider text-[10px]">
+            Módulo de Acceso por Rol
+          </div>
+          {onOpenAuthModal && (
+            <button
+              onClick={onOpenAuthModal}
+              className="text-[10px] text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 transition-colors"
+            >
+              <LogIn className="w-3 h-3" /> Acceder
+            </button>
+          )}
         </div>
-        <div className="font-semibold text-slate-200 mt-0.5 flex items-center justify-between">
-          <span>{userProfile.rol}</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+        <div className="font-semibold text-slate-200 mt-1 flex items-center justify-between">
+          <span className="truncate pr-2">{userProfile.rol}</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
         </div>
       </div>
 
