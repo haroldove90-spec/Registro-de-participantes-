@@ -6,17 +6,42 @@ const DEFAULT_SUPABASE_URL = 'https://acjelqhrflkxnkttlrkr.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjamVscWhyZmxreG5rdHRscmtyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5OTg1MDMsImV4cCI6MjEwMjU3NDUwM30.5FCoWmIzNwHtQJ9snnClQLvZLNMGiBjL4XtDAZ_L3Kk';
 
+function cleanUrlString(url: string): string {
+  if (!url) return DEFAULT_SUPABASE_URL;
+  let trimmed = url.trim();
+  // Remove any surrounding quotes or spaces
+  trimmed = trimmed.replace(/^["']+|["']+$/g, '');
+  // Remove trailing slashes and common path pollution
+  trimmed = trimmed.replace(/\/+$/, '');
+  
+  // If the user entered just the project ref (e.g. acjelqhrflkxnkttlrkr)
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    if (/^[a-z0-9]{20}$/i.test(trimmed)) {
+      return `https://${trimmed}.supabase.co`;
+    }
+    return `https://${trimmed}`;
+  }
+  
+  // Ensure valid origin format (e.g. https://xxxx.supabase.co)
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.origin;
+  } catch {
+    return DEFAULT_SUPABASE_URL;
+  }
+}
+
 function getSanitizedSupabaseUrl(): string {
   try {
     const customUrl = localStorage.getItem('supabase_custom_url');
-    if (customUrl && customUrl.startsWith('http')) {
-      return customUrl.trim().replace(/\/+$/, '');
+    if (customUrl && customUrl.length > 5) {
+      return cleanUrlString(customUrl);
     }
   } catch {}
 
   const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
-  if (envUrl && typeof envUrl === 'string' && envUrl.startsWith('http')) {
-    return envUrl.trim().replace(/\/+$/, '');
+  if (envUrl && typeof envUrl === 'string' && envUrl.length > 5) {
+    return cleanUrlString(envUrl);
   }
 
   return DEFAULT_SUPABASE_URL;
@@ -26,13 +51,13 @@ function getSanitizedAnonKey(): string {
   try {
     const customKey = localStorage.getItem('supabase_custom_anon_key');
     if (customKey && customKey.length > 20) {
-      return customKey.trim();
+      return customKey.trim().replace(/^["']+|["']+$/g, '');
     }
   } catch {}
 
   const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
   if (envKey && typeof envKey === 'string' && envKey.length > 20) {
-    return envKey.trim();
+    return envKey.trim().replace(/^["']+|["']+$/g, '');
   }
 
   return DEFAULT_SUPABASE_ANON_KEY;
