@@ -25,23 +25,56 @@ import {
   Plus,
   Sparkles,
   CheckCircle2,
+  Database,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
+import { syncAllLocalEventsToSupabase, fetchEventosFromSupabase } from '../../lib/supabase';
+import { saveStoredEventos } from '../../utils/storage';
 
 interface HistorialModuleProps {
   eventos: EventoData[];
   onDeleteEvento: (id: string) => void;
   onUpdateEvento: (eventoActualizado: EventoData) => void;
+  onSyncEventos?: (eventos: EventoData[]) => void;
 }
 
 export const HistorialModule: React.FC<HistorialModuleProps> = ({
   eventos,
   onDeleteEvento,
   onUpdateEvento,
+  onSyncEventos,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTipo, setFilterTipo] = useState<string>('todos');
   const [filterModalidad, setFilterModalidad] = useState<string>('todos');
   const [selectedEvento, setSelectedEvento] = useState<EventoData | null>(null);
+
+  // Sync state
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ success?: boolean; text?: string } | null>(null);
+
+  const handleSyncToSupabase = async () => {
+    setIsSyncing(true);
+    setSyncStatus(null);
+    const res = await syncAllLocalEventsToSupabase(eventos);
+    if (res.success) {
+      setSyncStatus({
+        success: true,
+        text: `¡${res.syncedCount} evento(s) y sus participantes sincronizados con Supabase Cloud!`,
+      });
+      const remote = await fetchEventosFromSupabase();
+      if (remote && onSyncEventos) {
+        onSyncEventos(remote);
+      }
+    } else {
+      setSyncStatus({
+        success: false,
+        text: `Error al guardar en Supabase: ${res.error || 'Verifica la conexión o el script SQL'}`,
+      });
+    }
+    setIsSyncing(false);
+  };
 
   // New Participant Modal inside Event Detail
   const [showAddParticipantModal, setShowAddParticipantModal] = useState(false);
@@ -210,6 +243,16 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
 
             {/* Global Export Buttons */}
             <button
+              onClick={handleSyncToSupabase}
+              disabled={isSyncing || eventos.length === 0}
+              className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-all flex items-center gap-1.5 shadow-2xs disabled:opacity-50"
+              title="Guardar y Sincronizar todos los eventos con la base de datos Supabase Cloud"
+            >
+              <Database className={`w-3.5 h-3.5 text-emerald-400 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'Sincronizando...' : 'Guardar en Supabase'}</span>
+            </button>
+
+            <button
               onClick={() => exportAllEventosToExcel(filteredEventos)}
               className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs"
               title="Exportar todos los eventos a Excel (.xlsx)"
@@ -226,6 +269,32 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Sync Status Banner */}
+        {syncStatus && (
+          <div
+            className={`p-3 rounded-xl text-xs font-semibold flex items-center justify-between gap-2 border animate-fade-in ${
+              syncStatus.success
+                ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                : 'bg-rose-50 text-rose-900 border-rose-200'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {syncStatus.success ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              )}
+              <span>{syncStatus.text}</span>
+            </div>
+            <button
+              onClick={() => setSyncStatus(null)}
+              className="text-slate-400 hover:text-slate-600 p-1"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Events List / Cards */}

@@ -227,7 +227,7 @@ export async function fetchEventosFromSupabase(): Promise<EventoData[] | null> {
 /**
  * Inserts or updates an Evento and all its participants in Supabase
  */
-export async function upsertEventoToSupabase(evento: EventoData): Promise<boolean> {
+export async function upsertEventoToSupabase(evento: EventoData): Promise<{ success: boolean; error?: string }> {
   try {
     const eventoRow = mapEventoToRow(evento);
     const { error: eventoError } = await supabase
@@ -235,41 +235,61 @@ export async function upsertEventoToSupabase(evento: EventoData): Promise<boolea
       .upsert(eventoRow, { onConflict: 'id' });
 
     if (eventoError) {
-      if (isTableMissingError(eventoError)) {
-        return false;
-      }
-      console.warn('Supabase upsert evento notice:', eventoError.message);
-      return false;
+      console.error('Supabase upsert evento error:', eventoError);
+      return { success: false, error: eventoError.message };
     }
 
-    // Delete existing participants for this event then re-insert to maintain sequence
+    // Delete existing participants for this event then re-insert with unique IDs
     await supabase.from('participantes').delete().eq('evento_id', evento.id);
 
     if (evento.participantes && evento.participantes.length > 0) {
-      const partRows = evento.participantes.map((p) => ({
-        id: p.id || undefined,
+      const partRows = evento.participantes.map((p, idx) => ({
+        id: `${evento.id}_p_${p.pos || idx + 1}_${p.id || Math.random().toString(36).substring(2, 6)}`,
         evento_id: evento.id,
-        pos: p.pos,
-        no_emp: p.noEmp,
+        pos: p.pos || idx + 1,
+        no_emp: p.noEmp || '',
         nombre: p.nombre,
         genero: p.genero,
-        puesto: p.puesto,
-        depto: p.depto,
+        puesto: p.puesto || '',
+        depto: p.depto || '',
         firma: p.firma || '',
       }));
 
       const { error: partError } = await supabase.from('participantes').insert(partRows);
-      if (partError && !isTableMissingError(partError)) {
-        console.warn('Supabase insert participantes notice:', partError.message);
+      if (partError) {
+        console.error('Supabase insert participantes error:', partError);
+        return { success: false, error: partError.message };
       }
     }
 
-    return true;
+    return { success: true };
   } catch (err: any) {
-    if (!isTableMissingError(err)) {
-      console.warn('Notice in upsertEventoToSupabase:', err?.message || err);
+    console.error('Exception in upsertEventoToSupabase:', err);
+    return { success: false, error: err?.message || 'Error de conexión' };
+  }
+}
+
+/**
+ * Uploads/Syncs all local events to Supabase cloud
+ */
+export async function syncAllLocalEventsToSupabase(eventos: EventoData[]): Promise<{
+  success: boolean;
+  syncedCount: number;
+  error?: string;
+}> {
+  try {
+    let syncedCount = 0;
+    for (const evt of eventos) {
+      const res = await upsertEventoToSupabase(evt);
+      if (res.success) {
+        syncedCount++;
+      } else {
+        return { success: false, syncedCount, error: res.error };
+      }
     }
-    return false;
+    return { success: true, syncedCount };
+  } catch (err: any) {
+    return { success: false, syncedCount: 0, error: err?.message };
   }
 }
 

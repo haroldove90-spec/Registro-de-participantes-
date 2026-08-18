@@ -111,6 +111,7 @@ export default function App() {
               eventos={eventos}
               onDeleteEvento={handleDeleteEvento}
               onUpdateEvento={handleUpdateEvento}
+              onSyncEventos={(synced) => setEventos(synced)}
             />
           )}
 
