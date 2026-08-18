@@ -128,6 +128,15 @@ export function deleteEvento(id: string): EventoData[] {
   return actualizados;
 }
 
+export function clearAllEventos(): EventoData[] {
+  try {
+    localStorage.removeItem(STORAGE_KEY_EVENTOS);
+  } catch (err) {
+    console.error('Error clearing events from localStorage:', err);
+  }
+  return [];
+}
+
 export function getStoredUserProfile(): UserProfile {
   try {
     const data = localStorage.getItem(STORAGE_KEY_PROFILE);

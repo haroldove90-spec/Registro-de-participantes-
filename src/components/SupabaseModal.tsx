@@ -86,8 +86,13 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
 -- 1. HABILITAR EXTENSIONES NECESARIAS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. TABLA PRINCIPAL DE EVENTOS DE CAPACITACIÓN Y REUNIONES
-CREATE TABLE IF NOT EXISTS public.eventos (
+-- 2. LIMPIEZA PREVIA SEGURA (PARA EMPEZAR 100% LIMPIO)
+DROP TABLE IF EXISTS public.participantes CASCADE;
+DROP TABLE IF EXISTS public.eventos CASCADE;
+DROP TABLE IF EXISTS public.perfiles_usuario CASCADE;
+
+-- 3. TABLA PRINCIPAL DE EVENTOS DE CAPACITACIÓN Y REUNIONES
+CREATE TABLE public.eventos (
     id TEXT PRIMARY KEY,
     nombre_evento TEXT NOT NULL,
     objetivo_evento TEXT DEFAULT '',
@@ -279,28 +284,40 @@ BEGIN
         RETURNING * INTO result_user;
     END IF;
 
-    UPDATE auth.users
-    SET raw_user_meta_data = raw_user_meta_data || jsonb_build_object('rol', nuevo_rol)
-    WHERE LOWER(email) = LOWER(target_email);
+    BEGIN
+        UPDATE auth.users
+        SET raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('rol', nuevo_rol)
+        WHERE LOWER(email) = LOWER(target_email);
+    EXCEPTION WHEN OTHERS THEN
+        -- Ignorar si no hay permisos directos sobre auth.users
+    END;
 
-    RETURN json_build_object('success', true, 'email', result_user.email, 'nuevo_rol', result_user.rol);
+    RETURN json_build_object(
+        'success', true, 
+        'email', result_user.email, 
+        'nombre', result_user.nombre,
+        'nuevo_rol', result_user.rol,
+        'mensaje', 'Rol actualizado con éxito a: ' || nuevo_rol
+    );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 11. USUARIO INICIAL POR DEFECTO
+-- 11. PERFIL INICIAL DE ADMINISTRADOR
 INSERT INTO public.perfiles_usuario (id, nombre, email, puesto, departamento, rfc, telefono, rol, avatar_url)
 VALUES (
-    'default_user',
-    'Lic. Ana Gabriela Mendoza',
-    '${SUPABASE_PROJECT_CONFIG.projectName}',
-    'Coordinadora de Desarrollo Organizacional & Capacitación',
-    'Recursos Humanos y Formación Continua',
-    'MEGA890412HR4',
-    '+52 (55) 8492-3021',
+    'admin_default',
+    'Harold Ove',
+    'haroldove90@gmail.com',
+    'Administrador de Capacitación y Desarrollo',
+    'Recursos Humanos / Formación',
+    'XAXX010101000',
+    '+52 (55) 1234-5678',
     'Administrador de Capacitación',
-    'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80'
+    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'
 )
-ON CONFLICT (email) DO NOTHING;`;
+ON CONFLICT (email) DO UPDATE SET
+    rol = EXCLUDED.rol,
+    updated_at = timezone('utc'::text, now());`;
 
     setSqlContent(rawSql);
   }, []);
