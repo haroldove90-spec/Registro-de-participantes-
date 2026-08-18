@@ -17,6 +17,9 @@ import {
   Building,
   User,
   Zap,
+  PenTool,
+  X,
+  Check,
 } from 'lucide-react';
 
 interface RegistroModuleProps {
@@ -65,6 +68,10 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
     { id: '2', pos: 2, noEmp: 'EMP-1002', nombre: 'Ana Isabel Mendoza', genero: 'M', puesto: 'Especialista de Procesos', depto: 'Calidad', firma: 'firmado' },
     { id: '3', pos: 3, noEmp: 'EMP-1003', nombre: 'Jorge Luis Morales', genero: 'H', puesto: 'Técnico de Planta', depto: 'Mantenimiento', firma: 'firmado' },
   ]);
+
+  // Modal for digital signature of an individual participant
+  const [signingParticipant, setSigningParticipant] = useState<Participant | null>(null);
+  const [tempSignature, setTempSignature] = useState<string>('');
 
   // Success Notification state
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -890,25 +897,82 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
                         />
                       </td>
 
-                      {/* Firma */}
+                      {/* Firma Digital de Participante */}
                       <td className="py-2.5 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateParticipant(
-                              p.id,
-                              'firma',
-                              p.firma === 'firmado' ? 'pendiente' : 'firmado'
-                            )
-                          }
-                          className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider uppercase border transition-colors ${
-                            p.firma === 'firmado'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                              : 'bg-amber-50 text-amber-700 border-amber-300'
-                          }`}
-                        >
-                          {p.firma === 'firmado' ? '✓ Firmado' : 'Pendiente'}
-                        </button>
+                        {p.firma && (p.firma.startsWith('data:image') || p.firma.startsWith('http')) ? (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSigningParticipant(p);
+                                setTempSignature(p.firma);
+                              }}
+                              className="group relative flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-[10px] font-bold transition-all cursor-pointer"
+                              title="Ver y editar trazo digital de firma"
+                            >
+                              <img
+                                src={p.firma}
+                                alt="Firma"
+                                className="h-4 max-w-[45px] object-contain inline-block bg-white rounded px-0.5 border border-emerald-200"
+                              />
+                              <span>✓ Trazo</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateParticipant(p.id, 'firma', '')}
+                              className="text-slate-400 hover:text-rose-600 p-0.5"
+                              title="Quitar firma"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : p.firma === 'firmado' ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSigningParticipant(p);
+                                setTempSignature('');
+                              }}
+                              className="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-300 text-blue-800 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                              title="Clic para capturar firma digital con trazo"
+                            >
+                              <PenTool className="w-2.5 h-2.5 text-blue-600" />
+                              <span>✓ Electrónica</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateParticipant(p.id, 'firma', '')}
+                              className="text-slate-400 hover:text-rose-600 p-0.5"
+                              title="Marcar como pendiente"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSigningParticipant(p);
+                                setTempSignature('');
+                              }}
+                              className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                              title="Capturar trazo de firma digital"
+                            >
+                              <PenTool className="w-2.5 h-2.5 text-amber-600" />
+                              <span>Firmar</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateParticipant(p.id, 'firma', 'firmado')}
+                              className="px-1.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-[9px] font-bold cursor-pointer"
+                              title="Aceptar rápidamente firma electrónica"
+                            >
+                              ✓
+                            </button>
+                          </div>
+                        )}
                       </td>
 
                       {/* Remove Row */}
@@ -959,12 +1023,91 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
         <div className="pt-4 flex items-center justify-end gap-4">
           <button
             type="submit"
-            className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center gap-2"
+            className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             <Save className="w-5 h-5" /> Guardar y Registrar Evento
           </button>
         </div>
       </form>
+
+      {/* MODAL DE FIRMA DIGITAL PARA PARTICIPANTE INDIVIDUAL */}
+      {signingParticipant && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden space-y-4 animate-fade-in">
+            <div className="bg-slate-900 text-white p-4 px-5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-blue-600/30 border border-blue-500/40 text-blue-400">
+                  <PenTool className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">Captura de Firma Digital del Participante</h3>
+                  <p className="text-[11px] text-slate-300">
+                    Pos #{signingParticipant.pos} • {signingParticipant.nombre || 'Participante'} ({signingParticipant.noEmp})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSigningParticipant(null)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 text-blue-900 text-xs">
+                <p className="font-semibold">
+                  {signingParticipant.nombre ? signingParticipant.nombre : 'Participante sin nombre registrado'}
+                </p>
+                <p className="text-[11px] text-blue-700">
+                  Puesto: {signingParticipant.puesto || 'General'} • Área: {signingParticipant.depto || 'General'}
+                </p>
+              </div>
+
+              {/* Signature Canvas */}
+              <SignatureCanvas
+                label="Trazo de Firma Digital"
+                initialSignature={tempSignature || signingParticipant.firma}
+                onSave={(sig) => setTempSignature(sig)}
+              />
+
+              <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateParticipant(signingParticipant.id, 'firma', 'firmado');
+                    setSigningParticipant(null);
+                  }}
+                  className="px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                >
+                  Usar Firma Electrónica Rápida
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSigningParticipant(null)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateParticipant(signingParticipant.id, 'firma', tempSignature || 'firmado');
+                      setSigningParticipant(null);
+                    }}
+                    className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Guardar Firma</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

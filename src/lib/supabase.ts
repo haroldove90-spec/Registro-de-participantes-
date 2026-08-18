@@ -5,9 +5,9 @@ import { EventoData, Participant, UserProfile, UserRole } from '../types';
 export const SUPABASE_PROJECT_CONFIG = {
   projectName: 'registrodeparticipantes@appdesignsoftware.com',
   projectId: 'acjelqhrflkxnkttlrkr',
-  url: import.meta.env.VITE_SUPABASE_URL || 'https://acjelqhrflkxnkttlrkr.supabase.co',
+  url: ((import.meta as any).env?.VITE_SUPABASE_URL as string) || 'https://acjelqhrflkxnkttlrkr.supabase.co',
   anonKey:
-    import.meta.env.VITE_SUPABASE_ANON_KEY ||
+    ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string) ||
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjamVscWhyZmxreG5rdHRscmtyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5OTg1MDMsImV4cCI6MjEwMjU3NDUwM30.5FCoWmIzNwHtQJ9snnClQLvZLNMGiBjL4XtDAZ_L3Kk',
 };
 

@@ -80,6 +80,9 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
   const [newPuesto, setNewPuesto] = useState('');
   const [newDepto, setNewDepto] = useState('');
 
+  // Signature Lightbox Preview Modal
+  const [viewingSignature, setViewingSignature] = useState<{ title: string; signature: string } | null>(null);
+
   const handleSyncToSupabase = async () => {
     setIsSyncing(true);
     setSyncStatus(null);
@@ -820,18 +823,42 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
 
                 <div className="space-y-2 text-xs">
                   <h4 className="font-bold text-slate-900 uppercase text-[11px] tracking-wider">
-                    Control de Instructor
+                    Control de Instructor y Aprobación
                   </h4>
-                  <p className="font-bold text-slate-900 text-sm">{selectedEvento.instructor.nombre}</p>
-                  <p className="text-slate-600">
-                    Tipo: {selectedEvento.instructor.tipo} | RFC: {selectedEvento.instructor.rfc}
-                  </p>
-                  {selectedEvento.instructor.puesto && (
-                    <p className="text-slate-600">Puesto: {selectedEvento.instructor.puesto}</p>
-                  )}
-                  {selectedEvento.instructor.empresa && (
-                    <p className="text-slate-600">Empresa: {selectedEvento.instructor.empresa}</p>
-                  )}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-slate-900 text-sm">{selectedEvento.instructor.nombre}</p>
+                      <p className="text-slate-600">
+                        Tipo: {selectedEvento.instructor.tipo} | RFC: {selectedEvento.instructor.rfc || 'N/A'}
+                      </p>
+                      {selectedEvento.instructor.puesto && (
+                        <p className="text-slate-600">Puesto: {selectedEvento.instructor.puesto}</p>
+                      )}
+                      {selectedEvento.instructor.empresa && (
+                        <p className="text-slate-600">Empresa: {selectedEvento.instructor.empresa}</p>
+                      )}
+                    </div>
+
+                    {/* Instructor Signature Box */}
+                    {selectedEvento.instructor.firma && (
+                      <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-2xs text-center shrink-0">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Firma Instructor</span>
+                        {selectedEvento.instructor.firma.startsWith('data:image') || selectedEvento.instructor.firma.startsWith('http') ? (
+                          <img
+                            src={selectedEvento.instructor.firma}
+                            alt="Firma Instructor"
+                            onClick={() => setViewingSignature({ title: `Firma del Instructor: ${selectedEvento.instructor.nombre}`, signature: selectedEvento.instructor.firma })}
+                            className="h-10 max-w-[120px] object-contain mx-auto cursor-pointer hover:opacity-80 transition-opacity"
+                            title="Clic para ampliar firma"
+                          />
+                        ) : (
+                          <span className="text-[11px] font-serif italic text-slate-700 font-bold px-2 py-0.5 border-b border-slate-700">
+                            {selectedEvento.instructor.firma}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -845,13 +872,13 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
 
                   <button
                     onClick={() => setShowAddParticipantModal(true)}
-                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1"
+                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" /> Agregar Participante
                   </button>
                 </div>
 
-                <div className="border border-slate-200 rounded-xl overflow-x-auto">
+                <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-2xs">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
                       <tr>
@@ -861,7 +888,7 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                         <th className="p-3 text-center">Género</th>
                         <th className="p-3">Puesto</th>
                         <th className="p-3">Departamento</th>
-                        <th className="p-3 text-center">Firma</th>
+                        <th className="p-3 text-center min-w-[120px]">Firma Digital</th>
                         <th className="p-3 text-right">Acción</th>
                       </tr>
                     </thead>
@@ -890,9 +917,23 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                           <td className="p-3">{p.puesto}</td>
                           <td className="p-3">{p.depto}</td>
                           <td className="p-3 text-center">
-                            {p.firma ? (
-                              <span className="text-emerald-600 font-semibold text-[11px] flex items-center justify-center gap-1">
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Registrada
+                            {p.firma && (p.firma.startsWith('data:image') || p.firma.startsWith('http')) ? (
+                              <button
+                                type="button"
+                                onClick={() => setViewingSignature({ title: `Firma Digital de ${p.nombre} (${p.noEmp})`, signature: p.firma })}
+                                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-[11px] font-bold transition-all cursor-pointer"
+                                title="Clic para ampliar y autenticar firma digital"
+                              >
+                                <img
+                                  src={p.firma}
+                                  alt="Firma"
+                                  className="h-4 max-w-[50px] object-contain bg-white rounded px-0.5 border border-emerald-200"
+                                />
+                                <span>Ver Trazo</span>
+                              </button>
+                            ) : p.firma ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold text-[11px] bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Confirmada
                               </span>
                             ) : (
                               <span className="text-slate-400 text-[11px]">Pendiente</span>
@@ -1009,6 +1050,58 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* LIGHTBOX MODAL PARA VER FIRMA DIGITAL EN TAMAÑO COMPLETO */}
+      {viewingSignature && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setViewingSignature(null)}
+        >
+          <div
+            className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4 border border-slate-200 animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                <PenTool className="w-4 h-4 text-blue-600" />
+                <span>{viewingSignature.title}</span>
+              </div>
+              <button
+                onClick={() => setViewingSignature(null)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center min-h-[160px]">
+              {viewingSignature.signature.startsWith('data:image') || viewingSignature.signature.startsWith('http') ? (
+                <img
+                  src={viewingSignature.signature}
+                  alt="Firma Digital"
+                  className="max-h-40 max-w-full object-contain"
+                />
+              ) : (
+                <div className="font-serif italic text-xl font-bold text-slate-800 border-b-2 border-slate-800 pb-1">
+                  {viewingSignature.signature}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+              <span className="flex items-center gap-1 text-emerald-600 font-bold">
+                <CheckCircle2 className="w-4 h-4" /> Firma Digital Válida
+              </span>
+              <button
+                onClick={() => setViewingSignature(null)}
+                className="px-4 py-1.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}
