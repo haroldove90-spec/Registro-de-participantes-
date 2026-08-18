@@ -632,3 +632,40 @@ export async function signOutFromSupabase(): Promise<void> {
     console.warn('Error signing out from Supabase:', err);
   }
 }
+
+/**
+ * Gets currently authenticated Supabase user session if active in browser
+ */
+export async function getCurrentSupabaseUser(): Promise<UserProfile | null> {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.user) return null;
+
+    const email = session.user.email;
+    if (!email) return null;
+
+    const remoteProfile = await fetchUserProfileFromSupabase(email);
+    if (remoteProfile) return remoteProfile;
+
+    return {
+      id: session.user.id,
+      nombre: (session.user.user_metadata?.nombre as string) || email.split('@')[0],
+      email: email,
+      puesto: (session.user.user_metadata?.puesto as string) || 'Colaborador',
+      departamento: (session.user.user_metadata?.departamento as string) || 'General',
+      rfc: (session.user.user_metadata?.rfc as string) || 'XAXX010101000',
+      telefono: (session.user.user_metadata?.telefono as string) || '',
+      rol: (session.user.user_metadata?.rol as UserRole) || 'Coordinador de Capacitación',
+      avatarUrl:
+        (session.user.user_metadata?.avatarUrl as string) ||
+        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+      fechaIngreso: new Date().toISOString().split('T')[0],
+      notificacionesEmail: true,
+      modoOscuro: false,
+    };
+  } catch {
+    return null;
+  }
+}
