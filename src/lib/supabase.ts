@@ -2,13 +2,47 @@ import { createClient } from '@supabase/supabase-js';
 import { EventoData, Participant, UserProfile, UserRole } from '../types';
 
 // Supabase project credentials provided by the user
+const DEFAULT_SUPABASE_URL = 'https://acjelqhrflkxnkttlrkr.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjamVscWhyZmxreG5rdHRscmtyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5OTg1MDMsImV4cCI6MjEwMjU3NDUwM30.5FCoWmIzNwHtQJ9snnClQLvZLNMGiBjL4XtDAZ_L3Kk';
+
+function getSanitizedSupabaseUrl(): string {
+  try {
+    const customUrl = localStorage.getItem('supabase_custom_url');
+    if (customUrl && customUrl.startsWith('http')) {
+      return customUrl.trim().replace(/\/+$/, '');
+    }
+  } catch {}
+
+  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.startsWith('http')) {
+    return envUrl.trim().replace(/\/+$/, '');
+  }
+
+  return DEFAULT_SUPABASE_URL;
+}
+
+function getSanitizedAnonKey(): string {
+  try {
+    const customKey = localStorage.getItem('supabase_custom_anon_key');
+    if (customKey && customKey.length > 20) {
+      return customKey.trim();
+    }
+  } catch {}
+
+  const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
+  if (envKey && typeof envKey === 'string' && envKey.length > 20) {
+    return envKey.trim();
+  }
+
+  return DEFAULT_SUPABASE_ANON_KEY;
+}
+
 export const SUPABASE_PROJECT_CONFIG = {
   projectName: 'registrodeparticipantes@appdesignsoftware.com',
   projectId: 'acjelqhrflkxnkttlrkr',
-  url: ((import.meta as any).env?.VITE_SUPABASE_URL as string) || 'https://acjelqhrflkxnkttlrkr.supabase.co',
-  anonKey:
-    ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string) ||
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjamVscWhyZmxreG5rdHRscmtyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5OTg1MDMsImV4cCI6MjEwMjU3NDUwM30.5FCoWmIzNwHtQJ9snnClQLvZLNMGiBjL4XtDAZ_L3Kk',
+  url: getSanitizedSupabaseUrl(),
+  anonKey: getSanitizedAnonKey(),
 };
 
 // Initialize Supabase Client
@@ -19,6 +53,7 @@ export const supabase = createClient(
     auth: {
       persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl: true,
     },
   }
 );
@@ -497,26 +532,41 @@ export async function signInWithSupabase(
   error?: string;
 }> {
   try {
+    const cleanEmail = email.trim().toLowerCase();
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       password,
     });
 
     if (error) {
+      // If error mentions invalid login credentials, provide friendly message
+      if (
+        error.message?.includes('Invalid login credentials') ||
+        error.message?.includes('invalid_grant')
+      ) {
+        return {
+          success: false,
+          error:
+            'Correo o contraseña incorrectos. Si no tienes cuenta aún, pulsa en "Crear Cuenta".',
+        };
+      }
       return { success: false, error: error.message };
     }
 
     if (!data.user) {
-      return { success: false, error: 'No se obtuvo usuario tras autenticación.' };
+      return { success: false, error: 'No se pudo obtener la sesión de usuario.' };
     }
 
-    // Fetch user profile from perfiles_usuario
+    // Try fetching user profile from perfiles_usuario
     const remoteProfile = await fetchUserProfileFromSupabase(data.user.email);
 
     const userProfile: UserProfile = remoteProfile || {
       id: data.user.id,
-      nombre: (data.user.user_metadata?.nombre as string) || data.user.email?.split('@')[0] || 'Usuario',
-      email: data.user.email || email,
+      nombre:
+        (data.user.user_metadata?.nombre as string) ||
+        data.user.email?.split('@')[0] ||
+        'Usuario',
+      email: data.user.email || cleanEmail,
       puesto: (data.user.user_metadata?.puesto as string) || 'Colaborador',
       departamento: (data.user.user_metadata?.departamento as string) || 'General',
       rfc: (data.user.user_metadata?.rfc as string) || 'XAXX010101000',
@@ -584,11 +634,21 @@ export async function signUpWithSupabase(
     });
 
     if (error) {
+      if (
+        error.message?.includes('already registered') ||
+        error.message?.includes('User already registered')
+      ) {
+        return {
+          success: false,
+          error:
+            'Este correo ya se encuentra registrado. Ve a "Iniciar Sesión" para ingresar.',
+        };
+      }
       return { success: false, error: error.message };
     }
 
     const newUser: UserProfile = {
-      id: data.user?.id,
+      id: data.user?.id || `user_${Date.now()}`,
       nombre: profileData.nombre,
       email: formattedEmail,
       puesto: profileData.puesto || 'Colaborador',
@@ -604,8 +664,8 @@ export async function signUpWithSupabase(
       modoOscuro: false,
     };
 
-    // Try saving directly to perfiles_usuario table as well
-    await saveUserProfileToSupabase(newUser).catch(() => {});
+    // Try saving directly to perfiles_usuario table as well (non-blocking)
+    saveUserProfileToSupabase(newUser).catch(() => {});
 
     const needsEmailConfirmation = !data.session && !!data.user;
 
