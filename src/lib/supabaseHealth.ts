@@ -258,11 +258,17 @@ CREATE TABLE IF NOT EXISTS public.perfiles_usuario (
 CREATE INDEX IF NOT EXISTS idx_perfiles_email ON public.perfiles_usuario(email);
 
 -- ------------------------------------------------------------------------------
--- CONFIGURACIÓN DE SEGURIDAD RLS (Row Level Security)
+-- CONFIGURACIÓN DE SEGURIDAD RLS Y PERMISOS POSTGREST
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.eventos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.participantes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.perfiles_usuario ENABLE ROW LEVEL SECURITY;
+
+-- Otorgar permisos globales al esquema public para anon y authenticated
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
 
 -- Políticas Permisivas para App Web
 DROP POLICY IF EXISTS "Permitir todo en eventos" ON public.eventos;
@@ -273,6 +279,11 @@ CREATE POLICY "Permitir todo en participantes" ON public.participantes FOR ALL U
 
 DROP POLICY IF EXISTS "Permitir todo en perfiles_usuario" ON public.perfiles_usuario;
 CREATE POLICY "Permitir todo en perfiles_usuario" ON public.perfiles_usuario FOR ALL USING (true) WITH CHECK (true);
+
+-- ------------------------------------------------------------------------------
+-- RECARGA DE CACHÉ DE ESQUEMAS DE POSTGREST
+-- ------------------------------------------------------------------------------
+NOTIFY pgrst, 'reload schema';
 
 -- ------------------------------------------------------------------------------
 -- TRIGGER AUTOMÁTICO PARA NUEVOS USUARIOS REGISTRADOS EN AUTH
