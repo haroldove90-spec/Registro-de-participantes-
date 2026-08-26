@@ -58,8 +58,8 @@ export function translatePostgreSQLError(error: any): { friendly: string; action
   // 4. Network / CORS / Timeout / Paused Project
   if (msg.includes('fetch') || msg.includes('network') || msg.includes('failed to fetch') || msg.includes('timeout') || msg.includes('abort') || msg.includes('refused')) {
     return {
-      friendly: 'No hay respuesta del servidor Supabase (Tiempo de espera agotado o Fallo de Red).',
-      action: 'La causa más habitual es que tu proyecto en Supabase se pausó por inactividad o la URL/clave no coinciden. Haz clic en "Reanudar Proyecto en Supabase" para despertarlo o actualiza las credenciales.',
+      friendly: 'Error de Red del Navegador (Failed to Fetch). No se pudo comunicar con el servidor de Supabase.',
+      action: 'Tus tablas ya existen en SQL. Este error ocurre cuando una extensión (AdBlock/Brave Shields/VPN) bloquea las peticiones a supabase.co, la URL del proyecto no coincide o el clúster se está reiniciando.',
     };
   }
 

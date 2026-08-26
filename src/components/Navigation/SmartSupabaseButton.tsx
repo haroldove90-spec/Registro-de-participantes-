@@ -427,10 +427,16 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
                         className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
                           healthReport.tablesStatus.eventos
                             ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-rose-100 text-rose-800'
+                            : isConnected
+                            ? 'bg-rose-100 text-rose-800'
+                            : 'bg-amber-100 text-amber-800'
                         }`}
                       >
-                        {healthReport.tablesStatus.eventos ? '✓ Conectada' : '✗ No Encontrada'}
+                        {healthReport.tablesStatus.eventos
+                          ? '✓ Conectada'
+                          : isConnected
+                          ? '✗ No Encontrada'
+                          : '⚡ Esperando Red'}
                       </span>
                     </div>
 
@@ -446,10 +452,16 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
                         className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
                           healthReport.tablesStatus.participantes
                             ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-rose-100 text-rose-800'
+                            : isConnected
+                            ? 'bg-rose-100 text-rose-800'
+                            : 'bg-amber-100 text-amber-800'
                         }`}
                       >
-                        {healthReport.tablesStatus.participantes ? '✓ Conectada' : '✗ No Encontrada'}
+                        {healthReport.tablesStatus.participantes
+                          ? '✓ Conectada'
+                          : isConnected
+                          ? '✗ No Encontrada'
+                          : '⚡ Esperando Red'}
                       </span>
                     </div>
 
@@ -465,10 +477,16 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
                         className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
                           healthReport.tablesStatus.perfiles_usuario
                             ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-rose-100 text-rose-800'
+                            : isConnected
+                            ? 'bg-rose-100 text-rose-800'
+                            : 'bg-amber-100 text-amber-800'
                         }`}
                       >
-                        {healthReport.tablesStatus.perfiles_usuario ? '✓ Conectada' : '✗ No Encontrada'}
+                        {healthReport.tablesStatus.perfiles_usuario
+                          ? '✓ Conectada'
+                          : isConnected
+                          ? '✗ No Encontrada'
+                          : '⚡ Esperando Red'}
                       </span>
                     </div>
                   </div>
