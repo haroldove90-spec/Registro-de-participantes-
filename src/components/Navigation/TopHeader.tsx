@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
-import { UserProfile, ModuleType, UserRole } from '../../types';
+import { UserProfile, ModuleType, UserRole, EventoData } from '../../types';
 import {
   Building2,
   LogOut,
   Layers,
   ChevronDown,
 } from 'lucide-react';
+import { SmartSupabaseButton } from './SmartSupabaseButton';
 
 interface TopHeaderProps {
   activeModule: ModuleType;
   setActiveModule: (module: ModuleType) => void;
   userProfile: UserProfile;
+  eventos?: EventoData[];
+  onSyncedEventos?: (eventos: EventoData[]) => void;
   onLogout?: () => void;
   onRoleChange?: (newRole: UserRole) => void;
 }
@@ -28,6 +31,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   activeModule,
   setActiveModule,
   userProfile,
+  eventos = [],
+  onSyncedEventos,
   onLogout,
   onRoleChange,
 }) => {
@@ -100,6 +105,13 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         {/* Top Right Info & Actions */}
         <div className="flex items-center gap-2.5 self-end sm:self-center flex-wrap">
+          {/* Smart Supabase Button (Live status semaphore, ping ms, heartbeat, diagnostics, sync, SQL) */}
+          <SmartSupabaseButton
+            userProfile={userProfile}
+            eventos={eventos}
+            onSynced={onSyncedEventos}
+          />
+
           {/* Admin Role Navigation Switcher (Visible ONLY for Admin) */}
           {isAdmin && (
             <div className="relative">

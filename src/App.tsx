@@ -162,6 +162,8 @@ export default function App() {
           activeModule={activeModule}
           setActiveModule={setActiveModule}
           userProfile={userProfile}
+          eventos={eventos}
+          onSyncedEventos={(synced) => setEventos(synced)}
           onLogout={handleLogout}
           onRoleChange={handleRoleChange}
         />
