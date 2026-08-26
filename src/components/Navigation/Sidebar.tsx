@@ -1,6 +1,18 @@
-import React from 'react';
-import { UserProfile, ModuleType } from '../../types';
-import { ClipboardList, History, BarChart3, User, Building2, ShieldCheck, ChevronRight, Sparkles, LogOut } from 'lucide-react';
+import React, { useState } from 'react';
+import { UserProfile, ModuleType, UserRole } from '../../types';
+import {
+  ClipboardList,
+  History,
+  BarChart3,
+  User,
+  Building2,
+  ShieldCheck,
+  ChevronRight,
+  Sparkles,
+  LogOut,
+  ChevronDown,
+  Layers,
+} from 'lucide-react';
 
 interface SidebarProps {
   activeModule: ModuleType;
@@ -8,7 +20,41 @@ interface SidebarProps {
   userProfile: UserProfile;
   totalEventosCount: number;
   onLogout?: () => void;
+  onRoleChange?: (newRole: UserRole) => void;
 }
+
+const AVAILABLE_ROLES: { role: UserRole; label: string; desc: string }[] = [
+  {
+    role: 'Administrador de Capacitación',
+    label: 'Administrador',
+    desc: 'Acceso total y configuración',
+  },
+  {
+    role: 'Coordinador de Capacitación',
+    label: 'Coordinador',
+    desc: 'Registro y gestión de eventos',
+  },
+  {
+    role: 'Instructor / Capacitador',
+    label: 'Instructor',
+    desc: 'Cursos asignados y firmas',
+  },
+  {
+    role: 'Recursos Humanos (RH)',
+    label: 'Recursos Humanos (RH)',
+    desc: 'Aprobación y presupuestos',
+  },
+  {
+    role: 'Participante / Empleado',
+    label: 'Participante / Empleado',
+    desc: 'Mis cursos e inscripciones',
+  },
+  {
+    role: 'Auditor / Consulta',
+    label: 'Auditor / Consulta',
+    desc: 'Visualización y reportes',
+  },
+];
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeModule,
@@ -16,7 +62,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   userProfile,
   totalEventosCount,
   onLogout,
+  onRoleChange,
 }) => {
+  const [showRoleMenu, setShowRoleMenu] = useState(false);
+
+  // Determine if user has admin privileges to switch roles
+  const isAdmin =
+    userProfile.rol === 'Administrador de Capacitación' ||
+    userProfile.rol.toLowerCase().includes('admin') ||
+    userProfile.email.toLowerCase() === 'haroldove90@gmail.com';
+
   const navItems = [
     {
       id: 'metricas' as ModuleType,
@@ -73,14 +128,83 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Role Banner */}
-      <div className="mx-4 mt-4 p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 text-xs">
-        <div className="text-slate-400 uppercase font-medium tracking-wider text-[10px]">
-          Módulo de Acceso por Rol
-        </div>
-        <div className="font-semibold text-slate-200 mt-1 flex items-center justify-between">
-          <span className="truncate pr-2">{userProfile.rol}</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+      {/* Role Banner / Admin Role Switcher */}
+      <div className="mx-3 mt-4 relative">
+        <div className="p-3 rounded-xl bg-slate-800/70 border border-slate-700/70 text-xs shadow-inner">
+          <div className="flex items-center justify-between text-slate-400 font-medium tracking-wider text-[10px]">
+            <span className="uppercase flex items-center gap-1">
+              <Layers className="w-3 h-3 text-blue-400" />
+              {isAdmin ? 'Navegación de Roles (Admin)' : 'Rol de Acceso'}
+            </span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          </div>
+
+          {isAdmin ? (
+            <div className="mt-2 space-y-1.5">
+              <button
+                type="button"
+                onClick={() => setShowRoleMenu(!showRoleMenu)}
+                className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-950 border border-slate-700 hover:border-blue-500/50 text-left transition-all cursor-pointer group"
+                title="Cambiar vista de rol para navegar en el sistema"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold text-white truncate group-hover:text-blue-300 transition-colors">
+                    {userProfile.rol}
+                  </p>
+                  <p className="text-[9px] text-slate-400">Clic para cambiar de rol</p>
+                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-transform shrink-0 ${
+                    showRoleMenu ? 'rotate-180 text-blue-400' : ''
+                  }`}
+                />
+              </button>
+
+              {showRoleMenu && (
+                <div className="mt-2 pt-2 border-t border-slate-700/80 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                  <p className="text-[10px] text-slate-400 px-1 font-semibold">
+                    Simular vista como:
+                  </p>
+                  {AVAILABLE_ROLES.map((r) => {
+                    const isCurrent = userProfile.rol === r.role;
+                    return (
+                      <button
+                        key={r.role}
+                        type="button"
+                        onClick={() => {
+                          if (onRoleChange) {
+                            onRoleChange(r.role);
+                          }
+                          setShowRoleMenu(false);
+                        }}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-all flex items-center justify-between cursor-pointer ${
+                          isCurrent
+                            ? 'bg-blue-600 text-white font-bold shadow-xs'
+                            : 'text-slate-300 hover:bg-slate-700/80 hover:text-white'
+                        }`}
+                      >
+                        <div className="min-w-0 pr-1">
+                          <p className="font-semibold text-[11px] truncate">{r.label}</p>
+                          <p
+                            className={`text-[9px] truncate ${
+                              isCurrent ? 'text-blue-100' : 'text-slate-400'
+                            }`}
+                          >
+                            {r.desc}
+                          </p>
+                        </div>
+                        {isCurrent && <span className="text-[10px] font-bold shrink-0">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="font-semibold text-slate-200 mt-1 flex items-center justify-between">
+              <span className="truncate pr-2">{userProfile.rol}</span>
+            </div>
+          )}
         </div>
       </div>
 

@@ -302,26 +302,33 @@ export async function upsertEventoToSupabase(evento: EventoData): Promise<{ succ
       return { success: false, error: eventoError.message };
     }
 
-    // Delete existing participants for this event then re-insert with unique IDs
-    await supabase.from('participantes').delete().eq('evento_id', evento.id);
-
+    // Upsert participants with consistent unique primary keys
     if (evento.participantes && evento.participantes.length > 0) {
-      const partRows = evento.participantes.map((p, idx) => ({
-        id: `${evento.id}_p_${p.pos || idx + 1}_${p.id || Math.random().toString(36).substring(2, 6)}`,
-        evento_id: evento.id,
-        pos: p.pos || idx + 1,
-        no_emp: p.noEmp || '',
-        nombre: p.nombre,
-        email: p.email || null,
-        genero: p.genero,
-        puesto: p.puesto || '',
-        depto: p.depto || '',
-        firma: p.firma || '',
-        confirmado: p.confirmado !== undefined ? p.confirmado : true,
-        fecha_confirmacion: p.fechaConfirmacion || new Date().toISOString(),
-      }));
+      // First clean up any orphaned participants for this event
+      await supabase.from('participantes').delete().eq('evento_id', evento.id);
 
-      const { error: partError } = await supabase.from('participantes').insert(partRows);
+      const partRows = evento.participantes.map((p, idx) => {
+        const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        return {
+          id: p.id && p.id.includes('_') ? `${p.id}_${uniqueSuffix}` : `${evento.id}_p_${p.pos || idx + 1}_${uniqueSuffix}`,
+          evento_id: evento.id,
+          pos: p.pos || idx + 1,
+          no_emp: p.noEmp || '',
+          nombre: p.nombre,
+          email: p.email || null,
+          genero: p.genero,
+          puesto: p.puesto || '',
+          depto: p.depto || '',
+          firma: p.firma || '',
+          confirmado: p.confirmado !== undefined ? p.confirmado : true,
+          fecha_confirmacion: p.fechaConfirmacion || new Date().toISOString(),
+        };
+      });
+
+      const { error: partError } = await supabase
+        .from('participantes')
+        .upsert(partRows, { onConflict: 'id' });
+
       if (partError) {
         console.error('Supabase insert participantes error:', partError);
         return { success: false, error: partError.message };
@@ -468,10 +475,26 @@ export async function fetchAllUsersFromSupabase(): Promise<UserProfile[]> {
 }
 
 /**
- * Saves or updates user profile in Supabase
+ * Saves or updates user profile in Supabase (both Table and Auth user_metadata)
  */
 export async function saveUserProfileToSupabase(profile: UserProfile): Promise<boolean> {
   try {
+    // 1. Update Auth user metadata so it persists in the active Supabase session
+    try {
+      await supabase.auth.updateUser({
+        data: {
+          nombre: profile.nombre,
+          puesto: profile.puesto,
+          departamento: profile.departamento,
+          rfc: profile.rfc,
+          telefono: profile.telefono,
+          rol: profile.rol,
+          avatarUrl: profile.avatarUrl,
+        },
+      });
+    } catch {}
+
+    // 2. Upsert into 'perfiles_usuario' table in Supabase PostgreSQL
     const { error } = await supabase.from('perfiles_usuario').upsert(
       {
         nombre: profile.nombre,

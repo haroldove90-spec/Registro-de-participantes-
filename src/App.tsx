@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ModuleType, EventoData, UserProfile, AuthSession } from './types';
+import { ModuleType, EventoData, UserProfile, AuthSession, UserRole } from './types';
 import {
   getStoredEventos,
   addEvento,
@@ -12,7 +12,7 @@ import {
   clearStoredAuthSession,
   initializeSupabaseSync,
 } from './utils/storage';
-import { signOutFromSupabase, getCurrentSupabaseUser } from './lib/supabase';
+import { signOutFromSupabase, getCurrentSupabaseUser, saveUserProfileToSupabase } from './lib/supabase';
 import { Sidebar } from './components/Navigation/Sidebar';
 import { MobileBottomNav } from './components/Navigation/MobileBottomNav';
 import { TopHeader } from './components/Navigation/TopHeader';
@@ -94,6 +94,19 @@ export default function App() {
       lastLogin: new Date().toISOString(),
     });
     setUserProfile(updatedProfile);
+    // Persist to Supabase cloud (table perfiles_usuario and auth metadata)
+    saveUserProfileToSupabase(updatedProfile).catch((err) => {
+      console.warn('Error syncing profile to Supabase:', err);
+    });
+  };
+
+  // Switch role on the fly (for Admin role exploration)
+  const handleRoleChange = (newRole: UserRole) => {
+    const updated = {
+      ...userProfile,
+      rol: newRole,
+    };
+    handleSaveProfile(updated);
   };
 
   const handleLoginSuccess = (authenticatedUser: UserProfile) => {
@@ -139,6 +152,7 @@ export default function App() {
         userProfile={userProfile}
         totalEventosCount={eventos.length}
         onLogout={handleLogout}
+        onRoleChange={handleRoleChange}
       />
 
       {/* Main Content Area */}
@@ -149,6 +163,7 @@ export default function App() {
           setActiveModule={setActiveModule}
           userProfile={userProfile}
           onLogout={handleLogout}
+          onRoleChange={handleRoleChange}
         />
 
         {/* Dynamic Module Body */}

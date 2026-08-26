@@ -1,8 +1,10 @@
-import React from 'react';
-import { UserProfile, ModuleType } from '../../types';
+import React, { useState } from 'react';
+import { UserProfile, ModuleType, UserRole } from '../../types';
 import {
   Building2,
   LogOut,
+  Layers,
+  ChevronDown,
 } from 'lucide-react';
 
 interface TopHeaderProps {
@@ -10,14 +12,31 @@ interface TopHeaderProps {
   setActiveModule: (module: ModuleType) => void;
   userProfile: UserProfile;
   onLogout?: () => void;
+  onRoleChange?: (newRole: UserRole) => void;
 }
+
+const AVAILABLE_ROLES: { role: UserRole; label: string }[] = [
+  { role: 'Administrador de Capacitación', label: 'Administrador' },
+  { role: 'Coordinador de Capacitación', label: 'Coordinador' },
+  { role: 'Instructor / Capacitador', label: 'Instructor' },
+  { role: 'Recursos Humanos (RH)', label: 'Recursos Humanos' },
+  { role: 'Participante / Empleado', label: 'Participante / Empleado' },
+  { role: 'Auditor / Consulta', label: 'Auditor' },
+];
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   activeModule,
   setActiveModule,
   userProfile,
   onLogout,
+  onRoleChange,
 }) => {
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+
+  const isAdmin =
+    userProfile.rol === 'Administrador de Capacitación' ||
+    userProfile.rol.toLowerCase().includes('admin') ||
+    userProfile.email.toLowerCase() === 'haroldove90@gmail.com';
   const getModuleTitle = () => {
     switch (activeModule) {
       case 'registro':
@@ -81,6 +100,68 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         {/* Top Right Info & Actions */}
         <div className="flex items-center gap-2.5 self-end sm:self-center flex-wrap">
+          {/* Admin Role Navigation Switcher (Visible ONLY for Admin) */}
+          {isAdmin && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowRoleDropdown(!showRoleDropdown)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-800 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                title="Cambiar rol para navegar como otro tipo de usuario"
+              >
+                <Layers className="w-3.5 h-3.5 text-purple-600" />
+                <span className="hidden md:inline">Vista de Rol:</span>
+                <span className="bg-purple-200 text-purple-900 px-2 py-0.5 rounded-md font-mono text-[11px] truncate max-w-[130px]">
+                  {userProfile.rol.split(' / ')[0]}
+                </span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-purple-600 transition-transform ${
+                    showRoleDropdown ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {showRoleDropdown && (
+                <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3.5 py-1.5 border-b border-slate-100">
+                    <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      Navegar en Sistema como:
+                    </p>
+                  </div>
+                  <div className="p-1 space-y-0.5">
+                    {AVAILABLE_ROLES.map((r) => {
+                      const isCurrent = userProfile.rol === r.role;
+                      return (
+                        <button
+                          key={r.role}
+                          type="button"
+                          onClick={() => {
+                            if (onRoleChange) {
+                              onRoleChange(r.role);
+                            }
+                            setShowRoleDropdown(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                            isCurrent
+                              ? 'bg-purple-600 text-white font-bold'
+                              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                          }`}
+                        >
+                          <span className="truncate">{r.label}</span>
+                          {isCurrent && (
+                            <span className="text-[10px] font-bold bg-white/20 px-1.5 py-0.5 rounded-sm">
+                              Activo
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* User Profile Button */}
           <button
             onClick={() => setActiveModule('perfil')}
