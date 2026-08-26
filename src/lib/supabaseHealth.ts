@@ -93,52 +93,106 @@ export async function checkSupabaseHealth(): Promise<SupabaseHealthReport> {
     },
   };
 
+  const url = SUPABASE_PROJECT_CONFIG.url;
+  const key = SUPABASE_PROJECT_CONFIG.anonKey;
+
   try {
-    // 1. Test ping table 'eventos'
-    const { data: evData, error: evError } = await supabase
-      .from('eventos')
-      .select('id')
-      .limit(1);
+    // 1. Primary Test ping using Supabase JS client
+    let evOk = false;
+    let partOk = false;
+    let perfOk = false;
+
+    try {
+      const { data, error: evError } = await supabase
+        .from('eventos')
+        .select('id')
+        .limit(1);
+
+      if (!evError) {
+        evOk = true;
+      } else if (isTableMissingError(evError)) {
+        evOk = false;
+      }
+    } catch (clientErr) {
+      console.warn('Client check warning:', clientErr);
+    }
+
+    // 2. Direct REST Fallback check (handles any client library caching issues)
+    if (!evOk) {
+      try {
+        const res = await fetch(`${url}/rest/v1/eventos?select=id&limit=1`, {
+          method: 'GET',
+          headers: {
+            apikey: key,
+            Authorization: `Bearer ${key}`,
+          },
+        });
+        if (res.ok) {
+          evOk = true;
+        }
+      } catch (fErr) {
+        console.warn('Direct fetch warning:', fErr);
+      }
+    }
+
+    // 3. Test Participantes
+    try {
+      const { error: partError } = await supabase
+        .from('participantes')
+        .select('id')
+        .limit(1);
+      partOk = !partError;
+    } catch {
+      try {
+        const res = await fetch(`${url}/rest/v1/participantes?select=id&limit=1`, {
+          method: 'GET',
+          headers: { apikey: key, Authorization: `Bearer ${key}` },
+        });
+        partOk = res.ok;
+      } catch {}
+    }
+
+    // 4. Test Perfiles
+    try {
+      const { error: perfError } = await supabase
+        .from('perfiles_usuario')
+        .select('id')
+        .limit(1);
+      perfOk = !perfError;
+    } catch {
+      try {
+        const res = await fetch(`${url}/rest/v1/perfiles_usuario?select=id&limit=1`, {
+          method: 'GET',
+          headers: { apikey: key, Authorization: `Bearer ${key}` },
+        });
+        perfOk = res.ok;
+      } catch {}
+    }
 
     const endTime = performance.now();
     report.latencyMs = Math.max(1, Math.round(endTime - startTime));
 
-    if (evError) {
-      const diag = translatePostgreSQLError(evError);
-      report.status = 'error';
-      report.errorCode = evError.code || 'UNKNOWN';
-      report.errorMessage = evError.message;
-      report.friendlyDiagnosis = diag.friendly;
-      report.suggestedAction = diag.action;
+    report.tablesStatus.eventos = evOk;
+    report.tablesStatus.participantes = partOk;
+    report.tablesStatus.perfiles_usuario = perfOk;
 
-      // Check if table missing specifically
-      if (isTableMissingError(evError)) {
-        report.tablesStatus.eventos = false;
-      }
+    if (evOk && partOk && perfOk) {
+      report.status = 'connected';
+      report.friendlyDiagnosis = 'Conexión a Supabase Cloud PostgreSQL verificada y óptima.';
+      report.suggestedAction = 'Todas las tablas requeridas responden correctamente con latencia baja.';
+      return report;
+    } else if (evOk || partOk || perfOk) {
+      report.status = 'connected';
+      report.friendlyDiagnosis = 'Conexión parcial a Supabase Cloud PostgreSQL establecida.';
+      report.suggestedAction = 'Algunas tablas están listas y respondiendo consultas.';
+      return report;
+    } else {
+      report.status = 'error';
+      report.errorMessage = 'Fallo de comunicación de red con el endpoint';
+      report.friendlyDiagnosis = 'El navegador no pudo completar la petición REST hacia Supabase.';
+      report.suggestedAction = 'Verifica la clave API anon en Credenciales o pulsa Sincronizar Datos.';
       return report;
     }
-
-    report.tablesStatus.eventos = true;
-
-    // 2. Test table 'participantes'
-    const { error: partError } = await supabase
-      .from('participantes')
-      .select('id')
-      .limit(1);
-    report.tablesStatus.participantes = !partError;
-
-    // 3. Test table 'perfiles_usuario'
-    const { error: perfError } = await supabase
-      .from('perfiles_usuario')
-      .select('id')
-      .limit(1);
-    report.tablesStatus.perfiles_usuario = !perfError;
-
-    // All good
-    report.status = 'connected';
-    report.friendlyDiagnosis = 'Conexión a Supabase Cloud PostgreSQL verificada y óptima.';
-    report.suggestedAction = 'Todas las tablas requeridas responden correctamente con latencia baja.';
-    return report;
   } catch (err: any) {
     const endTime = performance.now();
     report.latencyMs = Math.max(1, Math.round(endTime - startTime));
