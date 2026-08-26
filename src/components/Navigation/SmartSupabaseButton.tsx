@@ -525,19 +525,46 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
                   <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-3">
                     <div className="flex items-center gap-2 font-bold text-amber-900">
                       <Flame className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>¿Por qué aparece desconectado? (Pasos de Solución)</span>
+                      <span>¿Por qué ocurre este error y cómo resolverlo?</span>
                     </div>
-                    <ul className="list-disc list-inside space-y-1 text-slate-700">
-                      <li>
-                        <strong>1. Proyecto Pausado:</strong> En el plan gratuito, Supabase pausa los proyectos tras una semana sin uso.
-                      </li>
-                      <li>
-                        <strong>2. Despertar en 1 Clic:</strong> Haz clic abajo en <em>"Reanudar Proyecto"</em> y presiona <strong>Restore/Resume</strong> en la consola.
-                      </li>
-                      <li>
-                        <strong>3. Crear Tablas:</strong> Una vez activo, copia el script de la pestaña <em>"Script SQL"</em> y ejecútalo en el SQL Editor.
-                      </li>
-                    </ul>
+                    
+                    <div className="space-y-2 text-slate-700">
+                      <div className="p-2.5 bg-white rounded-lg border border-amber-200">
+                        <p className="font-bold text-slate-900 mb-0.5">Paso 1: Probar si el servidor de Supabase responde</p>
+                        <p className="text-[11px] text-slate-600 mb-2">
+                          Haz clic en el botón de abajo para abrir la URL de tu API directamente en una nueva pestaña:
+                        </p>
+                        <div className="flex gap-2 flex-wrap">
+                          <a
+                            href={`${SUPABASE_PROJECT_CONFIG.url}/rest/v1/`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors"
+                          >
+                            🔗 Probar enlace API en nueva pestaña <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                        <ul className="text-[11px] text-slate-600 mt-2 space-y-1 list-disc list-inside">
+                          <li><strong>Si abre y muestra texto (ej. <em>"No API key found"</em>)</strong>: El servidor está ACTIVO. El bloqueo en la app se debe a tu bloqueador de anuncios (AdBlock/Brave) o a la clave anon.</li>
+                          <li><strong>Si dice <em>"Project is paused"</em> o no carga</strong>: Tu proyecto en Supabase está pausado. Haz clic en el botón naranja de abajo para reactivarlo.</li>
+                        </ul>
+                      </div>
+
+                      <div className="p-2.5 bg-white rounded-lg border border-amber-200">
+                        <p className="font-bold text-slate-900 mb-0.5">Paso 2: Desactivar AdBlock / Brave Shields</p>
+                        <p className="text-[11px] text-slate-600">
+                          Extensiones como uBlock Origin, Adblock Plus o los escudos de Brave a menudo bloquean las llamadas a <code>supabase.co</code> en segundo plano. Desactívalo en esta pestaña o prueba en una ventana de incógnito.
+                        </p>
+                      </div>
+
+                      <div className="p-2.5 bg-white rounded-lg border border-amber-200">
+                        <p className="font-bold text-slate-900 mb-0.5">Paso 3: Verificar Clave Anon en Project Settings</p>
+                        <p className="text-[11px] text-slate-600">
+                          En tu consola de Supabase ve a <strong>Project Settings (⚙️) &gt; API</strong> y copia la <code>anon / public key</code> para pegarla en la pestaña <strong>Credenciales</strong>.
+                        </p>
+                      </div>
+                    </div>
+
                     <div className="flex items-center gap-2 pt-1 flex-wrap">
                       <a
                         href={projectDashboardUrl}
@@ -545,14 +572,14 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors shadow-2xs"
                       >
-                        ⚡ Reanudar Proyecto en Supabase ({SUPABASE_PROJECT_CONFIG.projectId}) <ExternalLink className="w-3.5 h-3.5" />
+                        ⚡ Reanudar / Ver Proyecto en Supabase ({SUPABASE_PROJECT_CONFIG.projectId}) <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                       <button
                         type="button"
                         onClick={() => setActiveTab('configuracion')}
                         className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 font-bold text-xs transition-colors cursor-pointer"
                       >
-                        <Settings className="w-3.5 h-3.5" /> Cambiar URL / Clave
+                        <Settings className="w-3.5 h-3.5" /> Pegar / Cambiar Clave Anon
                       </button>
                     </div>
                   </div>

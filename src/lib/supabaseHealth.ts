@@ -101,7 +101,7 @@ export async function checkSupabaseHealth(): Promise<SupabaseHealthReport> {
       .limit(1);
 
     const endTime = performance.now();
-    report.latencyMs = Math.round(endTime - startTime);
+    report.latencyMs = Math.max(1, Math.round(endTime - startTime));
 
     if (evError) {
       const diag = translatePostgreSQLError(evError);
@@ -141,7 +141,7 @@ export async function checkSupabaseHealth(): Promise<SupabaseHealthReport> {
     return report;
   } catch (err: any) {
     const endTime = performance.now();
-    report.latencyMs = Math.round(endTime - startTime);
+    report.latencyMs = Math.max(1, Math.round(endTime - startTime));
     report.status = 'error';
     const diag = translatePostgreSQLError(err);
     report.errorMessage = err?.message || 'Error de red';
