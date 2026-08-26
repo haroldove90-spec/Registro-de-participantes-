@@ -55,11 +55,11 @@ export function translatePostgreSQLError(error: any): { friendly: string; action
     };
   }
 
-  // 4. Network / CORS / Timeout
-  if (msg.includes('fetch') || msg.includes('network') || msg.includes('failed to fetch') || msg.includes('timeout')) {
+  // 4. Network / CORS / Timeout / Paused Project
+  if (msg.includes('fetch') || msg.includes('network') || msg.includes('failed to fetch') || msg.includes('timeout') || msg.includes('abort') || msg.includes('refused')) {
     return {
-      friendly: 'Error de Red o tiempo de espera agotado al contactar con el cluster Supabase.',
-      action: 'Comprueba tu conexión a internet o verifica si el proyecto de Supabase se encuentra activo (no pausado).',
+      friendly: 'No hay respuesta del servidor Supabase (Tiempo de espera agotado o Fallo de Red).',
+      action: 'La causa más habitual es que tu proyecto en Supabase se pausó por inactividad o la URL/clave no coinciden. Haz clic en "Reanudar Proyecto en Supabase" para despertarlo o actualiza las credenciales.',
     };
   }
 

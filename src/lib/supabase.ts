@@ -84,6 +84,31 @@ export const supabase = createClient(
 );
 
 /**
+ * Updates custom Supabase project credentials in localStorage and reloads them
+ */
+export function saveCustomSupabaseConfig(url: string, anonKey: string): boolean {
+  try {
+    const cleanUrl = cleanUrlString(url);
+    const cleanKey = anonKey.trim().replace(/^["']+|["']+$/g, '');
+    localStorage.setItem('supabase_custom_url', cleanUrl);
+    localStorage.setItem('supabase_custom_anon_key', cleanKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resets Supabase project credentials to original default
+ */
+export function resetSupabaseConfig(): void {
+  try {
+    localStorage.removeItem('supabase_custom_url');
+    localStorage.removeItem('supabase_custom_anon_key');
+  } catch {}
+}
+
+/**
  * Checks if a Supabase PostgREST error is due to missing tables / unexecuted SQL schema
  */
 export function isTableMissingError(error: any): boolean {

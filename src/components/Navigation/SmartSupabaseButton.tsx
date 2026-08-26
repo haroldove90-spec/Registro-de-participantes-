@@ -5,7 +5,12 @@ import {
   SupabaseHealthReport,
   getCompleteSupabaseSQLScript,
 } from '../../lib/supabaseHealth';
-import { syncAllLocalEventsToSupabase, SUPABASE_PROJECT_CONFIG } from '../../lib/supabase';
+import {
+  syncAllLocalEventsToSupabase,
+  SUPABASE_PROJECT_CONFIG,
+  saveCustomSupabaseConfig,
+  resetSupabaseConfig,
+} from '../../lib/supabase';
 import {
   Activity,
   CheckCircle2,
@@ -20,9 +25,11 @@ import {
   Clock,
   X,
   ExternalLink,
-  Wifi,
-  WifiOff,
   Zap,
+  Settings,
+  Flame,
+  KeyRound,
+  RotateCcw,
 } from 'lucide-react';
 
 interface SmartSupabaseButtonProps {
@@ -37,7 +44,7 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
   onSynced,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'diagnostico' | 'sincronizacion' | 'sql'>('diagnostico');
+  const [activeTab, setActiveTab] = useState<'diagnostico' | 'sincronizacion' | 'sql' | 'configuracion'>('diagnostico');
   const [isChecking, setIsChecking] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [copiedSQL, setCopiedSQL] = useState(false);
@@ -46,6 +53,11 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
     count: number;
     message: string;
   } | null>(null);
+
+  // Custom Supabase Credentials state
+  const [customUrl, setCustomUrl] = useState(SUPABASE_PROJECT_CONFIG.url);
+  const [customKey, setCustomKey] = useState(SUPABASE_PROJECT_CONFIG.anonKey);
+  const [configSavedNotice, setConfigSavedNotice] = useState<string | null>(null);
 
   const [healthReport, setHealthReport] = useState<SupabaseHealthReport>({
     status: 'checking',
@@ -85,8 +97,8 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
         latencyMs: 0,
         lastChecked: new Date().toLocaleTimeString(),
         errorMessage: err?.message || 'Error de conexión',
-        friendlyDiagnosis: 'No se pudo establecer contacto con el endpoint de Supabase.',
-        suggestedAction: 'Verifica tu red o estado del proyecto en Supabase.',
+        friendlyDiagnosis: 'No se pudo contactar con el cluster Supabase. Es posible que el proyecto esté pausado.',
+        suggestedAction: 'Abre la consola de Supabase y haz clic en "Restore / Resume project".',
         tablesStatus: { eventos: false, participantes: false, perfiles_usuario: false },
       });
     } finally {
@@ -152,6 +164,25 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
     setTimeout(() => setCopiedSQL(false), 3000);
   };
 
+  const handleSaveCredentials = (e: React.FormEvent) => {
+    e.preventDefault();
+    const ok = saveCustomSupabaseConfig(customUrl, customKey);
+    if (ok) {
+      setConfigSavedNotice('¡Credenciales guardadas! Recargando conexión...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    }
+  };
+
+  const handleResetCredentials = () => {
+    resetSupabaseConfig();
+    setConfigSavedNotice('Credenciales restablecidas al proyecto predeterminado. Recargando...');
+    setTimeout(() => {
+      window.location.reload();
+    }, 1000);
+  };
+
   // If user role is excluded (e.g. Participante/Inquilino), do not render
   if (isHiddenRole()) {
     return null;
@@ -159,6 +190,7 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
 
   const isConnected = healthReport.status === 'connected';
   const isError = healthReport.status === 'error';
+  const projectDashboardUrl = `https://supabase.com/dashboard/project/${SUPABASE_PROJECT_CONFIG.projectId}`;
 
   return (
     <>
@@ -175,7 +207,7 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
             isConnected
               ? 'bg-emerald-50/80 hover:bg-emerald-100/90 border-emerald-300 text-emerald-800'
               : isError
-              ? 'bg-rose-50/90 hover:bg-rose-100 border-rose-300 text-rose-800 animate-pulse'
+              ? 'bg-rose-50/90 hover:bg-rose-100 border-rose-300 text-rose-800'
               : 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800'
           }`}
           title="Monitoreo y Diagnóstico Inteligente de Supabase"
@@ -208,7 +240,7 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
                 : 'bg-rose-200/80 text-rose-900 font-bold'
             }`}
           >
-            {isChecking ? '...' : isConnected ? `${healthReport.latencyMs} ms` : 'Offline'}
+            {isChecking ? '...' : isConnected ? `${healthReport.latencyMs} ms` : 'Desconectado'}
           </span>
         </button>
       </div>
@@ -263,44 +295,57 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex border-b border-slate-200 bg-slate-50 px-6 pt-2 gap-2">
+            <div className="flex border-b border-slate-200 bg-slate-50 px-6 pt-2 gap-2 overflow-x-auto">
               <button
                 type="button"
                 onClick={() => setActiveTab('diagnostico')}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                   activeTab === 'diagnostico'
                     ? 'border-blue-600 text-blue-600 bg-white rounded-t-lg shadow-2xs'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <Activity className="w-4 h-4" />
+                <Activity className="w-3.5 h-3.5" />
                 Diagnóstico y Latencia
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab('sincronizacion')}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                   activeTab === 'sincronizacion'
                     ? 'border-blue-600 text-blue-600 bg-white rounded-t-lg shadow-2xs'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <UploadCloud className="w-4 h-4" />
+                <UploadCloud className="w-3.5 h-3.5" />
                 Sincronizar Bitácora
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab('sql')}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                   activeTab === 'sql'
                     ? 'border-blue-600 text-blue-600 bg-white rounded-t-lg shadow-2xs'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <Terminal className="w-4 h-4" />
-                Script SQL Autocontenido
+                <Terminal className="w-3.5 h-3.5" />
+                Script SQL
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('configuracion')}
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'configuracion'
+                    ? 'border-blue-600 text-blue-600 bg-white rounded-t-lg shadow-2xs'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Settings className="w-3.5 h-3.5" />
+                Credenciales
               </button>
             </div>
 
@@ -444,7 +489,7 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
                       </>
                     ) : (
                       <>
-                        <AlertTriangle className="w-4 h-4 text-rose-600" /> Excepción PostgreSQL Detectada:
+                        <AlertTriangle className="w-4 h-4 text-rose-600" /> Diagnóstico de Conexión:
                       </>
                     )}
                   </p>
@@ -456,6 +501,44 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* Helpful Action Box when Disconnected / Paused */}
+                {!isConnected && (
+                  <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-3">
+                    <div className="flex items-center gap-2 font-bold text-amber-900">
+                      <Flame className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>¿Por qué aparece desconectado? (Pasos de Solución)</span>
+                    </div>
+                    <ul className="list-disc list-inside space-y-1 text-slate-700">
+                      <li>
+                        <strong>1. Proyecto Pausado:</strong> En el plan gratuito, Supabase pausa los proyectos tras una semana sin uso.
+                      </li>
+                      <li>
+                        <strong>2. Despertar en 1 Clic:</strong> Haz clic abajo en <em>"Reanudar Proyecto"</em> y presiona <strong>Restore/Resume</strong> en la consola.
+                      </li>
+                      <li>
+                        <strong>3. Crear Tablas:</strong> Una vez activo, copia el script de la pestaña <em>"Script SQL"</em> y ejecútalo en el SQL Editor.
+                      </li>
+                    </ul>
+                    <div className="flex items-center gap-2 pt-1 flex-wrap">
+                      <a
+                        href={projectDashboardUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors shadow-2xs"
+                      >
+                        ⚡ Reanudar Proyecto en Supabase ({SUPABASE_PROJECT_CONFIG.projectId}) <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('configuracion')}
+                        className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 font-bold text-xs transition-colors cursor-pointer"
+                      >
+                        <Settings className="w-3.5 h-3.5" /> Cambiar URL / Clave
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* On-Demand Check Button */}
                 <div className="flex items-center justify-between pt-2">
@@ -596,6 +679,75 @@ export const SmartSupabaseButton: React.FC<SmartSupabaseButtonProps> = ({
                   </a>
                 </div>
               </div>
+            )}
+
+            {/* Tab 4: Configuración & Credenciales */}
+            {activeTab === 'configuracion' && (
+              <form onSubmit={handleSaveCredentials} className="p-6 overflow-y-auto space-y-4 flex-1">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2">
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-sm">
+                    <KeyRound className="w-4 h-4 text-blue-600" />
+                    Configuración de Conexión Supabase
+                  </h4>
+                  <p className="text-slate-600 leading-relaxed">
+                    Si creaste un nuevo proyecto en Supabase o deseas cambiar de entorno, ingresa aquí la URL del proyecto y la clave pública (Anon Key).
+                  </p>
+                </div>
+
+                {configSavedNotice && (
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{configSavedNotice}</span>
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Project URL (o ID de proyecto)
+                    </label>
+                    <input
+                      type="text"
+                      value={customUrl}
+                      onChange={(e) => setCustomUrl(e.target.value)}
+                      placeholder="https://xxxxxxxxxxxx.supabase.co"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono text-slate-800 focus:outline-blue-600 bg-white"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Anon API Key (Public)
+                    </label>
+                    <textarea
+                      value={customKey}
+                      onChange={(e) => setCustomKey(e.target.value)}
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                      rows={3}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-[11px] font-mono text-slate-800 focus:outline-blue-600 bg-white resize-none"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-between gap-3 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleResetCredentials}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Restaurar por Defecto
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5" /> Guardar y Conectar
+                  </button>
+                </div>
+              </form>
             )}
 
             {/* Modal Footer */}
