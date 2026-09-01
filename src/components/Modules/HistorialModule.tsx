@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { syncAllLocalEventsToSupabase, fetchEventosFromSupabase, upsertEventoToSupabase } from '../../lib/supabase';
 import { SignatureCanvas } from '../SignatureCanvas';
+import { HojaAsistenciaOficialModal } from '../HojaAsistenciaOficialModal';
 
 interface HistorialModuleProps {
   eventos: EventoData[];
@@ -58,6 +59,7 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
   const [filterModalidad, setFilterModalidad] = useState<string>('todos');
   const [activeTab, setActiveTab] = useState<'todos' | 'mis_inscripciones' | 'disponibles'>('todos');
   const [selectedEvento, setSelectedEvento] = useState<EventoData | null>(null);
+  const [officialSheetEvento, setOfficialSheetEvento] = useState<EventoData | null>(null);
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
@@ -531,9 +533,18 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
 
                     <button
                       onClick={() => setSelectedEvento(evt)}
-                      className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                      className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
                     >
                       <Eye className="w-3.5 h-3.5" /> Ver Detalle
+                    </button>
+
+                    <button
+                      onClick={() => setOfficialSheetEvento(evt)}
+                      title="Ver e imprimir Hoja Oficial de Lista de Asistencia (Formato 1:1 idéntico al físico)"
+                      className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 border border-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Formato 1:1</span>
                     </button>
 
                     <button
@@ -781,10 +792,17 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                 )}
 
                 <button
+                  onClick={() => setOfficialSheetEvento(selectedEvento)}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  title="Abrir e imprimir Formato Oficial 1:1 de Lista de Asistencia"
+                >
+                  <Printer className="w-3.5 h-3.5 text-slate-900" /> Formato Oficial (1:1)
+                </button>
+                <button
                   onClick={handlePrintEvent}
                   className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors flex items-center gap-1.5 border border-slate-700"
                 >
-                  <Printer className="w-3.5 h-3.5 text-blue-400" /> Imprimir
+                  <Printer className="w-3.5 h-3.5 text-blue-400" /> Imprimir Resumen
                 </button>
                 <button
                   onClick={() => exportEventoToExcel(selectedEvento)}
@@ -1104,6 +1122,14 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL DEL FORMATO OFICIAL (1:1) IDÉNTICO AL FÍSICO */}
+      {officialSheetEvento && (
+        <HojaAsistenciaOficialModal
+          evento={officialSheetEvento}
+          onClose={() => setOfficialSheetEvento(null)}
+        />
       )}
     </div>
   );

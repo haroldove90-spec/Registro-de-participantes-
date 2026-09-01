@@ -506,8 +506,19 @@ export function exportEventoToPdf(evento: EventoData): void {
     doc.text(evento.instructor.nombre || '', startX + 2, extValY + 4);
     doc.text(evento.instructor.empresa || 'N/A', startX + 82, extValY + 4);
     doc.text(evento.instructor.rfc || 'N/A', startX + 142, extValY + 4);
-    doc.setFontSize(7);
-    doc.text(evento.instructor.firma ? 'Firmado' : 'Pendiente', startX + 172, extValY + 4);
+    
+    // Check if graphical signature stroke is available
+    if (evento.instructor.firma && (evento.instructor.firma.startsWith('data:image') || evento.instructor.firma.startsWith('http'))) {
+      try {
+        doc.addImage(evento.instructor.firma, 'PNG', startX + 171, extValY + 0.5, 18, 5);
+      } catch {
+        doc.setFontSize(7);
+        doc.text('Firmado', startX + 172, extValY + 4);
+      }
+    } else {
+      doc.setFontSize(7);
+      doc.text(evento.instructor.firma ? 'Firmado' : 'Pendiente', startX + 172, extValY + 4);
+    }
   }
 
   // Header Box INTERNO
@@ -545,8 +556,19 @@ export function exportEventoToPdf(evento: EventoData): void {
     doc.text(evento.instructor.nombre || '', startX + 2, intValY + 4);
     doc.text(evento.instructor.puesto || 'N/A', startX + 82, intValY + 4);
     doc.text(evento.instructor.rfc || 'N/A', startX + 142, intValY + 4);
-    doc.setFontSize(7);
-    doc.text(evento.instructor.firma ? 'Firmado' : 'Pendiente', startX + 172, intValY + 4);
+    
+    // Check if graphical signature stroke is available
+    if (evento.instructor.firma && (evento.instructor.firma.startsWith('data:image') || evento.instructor.firma.startsWith('http'))) {
+      try {
+        doc.addImage(evento.instructor.firma, 'PNG', startX + 171, intValY + 0.5, 18, 5);
+      } catch {
+        doc.setFontSize(7);
+        doc.text('Firmado', startX + 172, intValY + 4);
+      }
+    } else {
+      doc.setFontSize(7);
+      doc.text(evento.instructor.firma ? 'Firmado' : 'Pendiente', startX + 172, intValY + 4);
+    }
   }
 
   currentY = intValY + 10;
@@ -581,8 +603,14 @@ export function exportEventoToPdf(evento: EventoData): void {
 
   // Left Section: CONTENIDO TEMATICO ("Se Anexa")
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text('Se Anexa', startX + 32.5, admValY + 12, { align: 'center' });
+  doc.setFontSize(9.5);
+  doc.text('Se Anexa', startX + 32.5, admValY + 8, { align: 'center' });
+  if (evento.nombreAdjunto) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    const shortAdj = evento.nombreAdjunto.length > 30 ? evento.nombreAdjunto.substring(0, 27) + '...' : evento.nombreAdjunto;
+    doc.text(`[${shortAdj}]`, startX + 32.5, admValY + 14, { align: 'center' });
+  }
 
   // Center Section: COSTOS
   doc.setFontSize(7);
@@ -612,10 +640,18 @@ export function exportEventoToPdf(evento: EventoData): void {
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'bold');
   if (evento.aprobadoRH) {
-    doc.text('APROBADO RH', startX + 170, admValY + 10, { align: 'center' });
-    doc.setFontSize(6.5);
+    if (evento.firmaRH && (evento.firmaRH.startsWith('data:image') || evento.firmaRH.startsWith('http'))) {
+      try {
+        doc.addImage(evento.firmaRH, 'PNG', startX + 155, admValY + 2, 30, 11);
+      } catch {
+        doc.text('APROBADO RH', startX + 170, admValY + 10, { align: 'center' });
+      }
+    } else {
+      doc.text('APROBADO RH', startX + 170, admValY + 10, { align: 'center' });
+    }
+    doc.setFontSize(6);
     doc.setFont('helvetica', 'normal');
-    doc.text('Firma Digital RH Confirmada', startX + 170, admValY + 15, { align: 'center' });
+    doc.text('Firma Digital RH Confirmada', startX + 170, admValY + 18, { align: 'center' });
   } else {
     doc.text('PENDIENTE RH', startX + 170, admValY + 12, { align: 'center' });
   }
@@ -637,8 +673,16 @@ export function exportEventoToPdf(evento: EventoData): void {
     p.nombre,
     p.puesto,
     p.depto,
-    p.firma ? 'Firmado' : '',
+    p.firma && !p.firma.startsWith('data:image') ? 'Firmado' : '',
   ]);
+
+  // Map participant signatures for rendering in didDrawCell
+  const participantSignaturesMap: { [rowIndex: number]: string } = {};
+  evento.participantes.forEach((p, idx) => {
+    if (p.firma && (p.firma.startsWith('data:image') || p.firma.startsWith('http'))) {
+      participantSignaturesMap[idx] = p.firma;
+    }
+  });
 
   // If fewer than 16 rows, pad empty rows to fill out the form naturally like the picture
   const minRows = 16;
@@ -661,6 +705,7 @@ export function exportEventoToPdf(evento: EventoData): void {
       lineColor: [0, 0, 0],
       lineWidth: 0.25,
       textColor: [0, 0, 0],
+      minCellHeight: 6,
     },
     headStyles: {
       fontStyle: 'bold',
@@ -677,6 +722,18 @@ export function exportEventoToPdf(evento: EventoData): void {
       3: { cellWidth: 40 },
       4: { cellWidth: 30 },
       5: { halign: 'center', cellWidth: 20 },
+    },
+    didDrawCell: (data) => {
+      if (data.section === 'body' && data.column.index === 5) {
+        const sigUrl = participantSignaturesMap[data.row.index];
+        if (sigUrl) {
+          try {
+            doc.addImage(sigUrl, 'PNG', data.cell.x + 1.5, data.cell.y + 0.8, 17, 4.4);
+          } catch (err) {
+            console.warn('Could not draw signature stroke on cell', err);
+          }
+        }
+      }
     },
     margin: { left: startX, right: 10 },
   });

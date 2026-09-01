@@ -45,6 +45,7 @@ export interface EventoData {
   fechaInicio: string; // YYYY-MM-DD
   fechaTermino: string; // YYYY-MM-DD
   noDias: number;
+  horasPorDia?: number; // Horas diarias estimadas
   horarioDe: string; // e.g. "09:00"
   horarioA: string; // e.g. "17:00"
   horasCapacitacion: number;
@@ -61,6 +62,8 @@ export interface EventoData {
   // 4. Administración de Recursos y Costos
   contenidoTematico: string;
   nombreAdjunto?: string;
+  archivoAdjuntoData?: string; // Base64 data URL for real uploaded file
+  archivoAdjuntoTamano?: string; // Formatted size (e.g. "245 KB")
   anexoContenido: boolean;
   costos: Costos;
   firmaRH?: string;

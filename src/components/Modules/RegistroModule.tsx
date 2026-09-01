@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useId } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import { EventoData, Participant, TipoEvento, UbicacionModalidad, TipoInstructor, Genero } from '../../types';
 import { SignatureCanvas } from '../SignatureCanvas';
+import { CurrencyInput } from '../CurrencyInput';
 import {
   Plus,
   Trash2,
@@ -20,6 +21,12 @@ import {
   PenTool,
   X,
   Check,
+  Upload,
+  Download,
+  Eye,
+  File,
+  Calculator,
+  HelpCircle,
 } from 'lucide-react';
 
 interface RegistroModuleProps {
@@ -29,6 +36,7 @@ interface RegistroModuleProps {
 export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) => {
   // Checkbox field IDs for proper label association
   const anexoCheckboxId = useId();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Datos Generales del Evento
   const [nombreEvento, setNombreEvento] = useState('');
@@ -39,11 +47,13 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
   const [fechaInicio, setFechaInicio] = useState(new Date().toISOString().split('T')[0]);
   const [fechaTermino, setFechaTermino] = useState(new Date().toISOString().split('T')[0]);
   const [noDias, setNoDias] = useState<number>(1);
+  const [horasPorDia, setHorasPorDia] = useState<number>(8);
   const [horarioDe, setHorarioDe] = useState('09:00');
   const [horarioA, setHorarioA] = useState('17:00');
   const [horasCapacitacion, setHorasCapacitacion] = useState<number>(8);
+  const [autoCalculateHours, setAutoCalculateHours] = useState<boolean>(true);
 
-  // 3. Control de Instructores
+  // 2. Control de Instructores
   const [tipoInstructor, setTipoInstructor] = useState<TipoInstructor>('Interno');
   const [nombreInstructor, setNombreInstructor] = useState('');
   const [puestoInstructor, setPuestoInstructor] = useState('');
@@ -51,9 +61,11 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
   const [rfcInstructor, setRfcInstructor] = useState('');
   const [firmaInstructor, setFirmaInstructor] = useState('');
 
-  // 4. Administración de Recursos y Costos
+  // 3. Administración de Recursos y Costos
   const [contenidoTematico, setContenidoTematico] = useState('');
   const [nombreAdjunto, setNombreAdjunto] = useState('');
+  const [archivoAdjuntoData, setArchivoAdjuntoData] = useState<string>('');
+  const [archivoAdjuntoTamano, setArchivoAdjuntoTamano] = useState<string>('');
   const [anexoContenido, setAnexoContenido] = useState(false);
   const [costoInstructor, setCostoInstructor] = useState<number>(0);
   const [costoMateriales, setCostoMateriales] = useState<number>(0);
@@ -62,7 +74,7 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
   const [firmaRH, setFirmaRH] = useState('');
   const [aprobadoRH, setAprobadoRH] = useState(true);
 
-  // 5. Lista de Asistencia / Colegas Participantes
+  // 4. Lista de Asistencia / Colegas Participantes
   const [participantes, setParticipantes] = useState<Participant[]>([
     { id: '1', pos: 1, noEmp: 'EMP-1001', nombre: 'Carlos Eduardo Ramírez', genero: 'H', puesto: 'Analista Sr.', depto: 'Operaciones', firma: 'firmado' },
     { id: '2', pos: 2, noEmp: 'EMP-1002', nombre: 'Ana Isabel Mendoza', genero: 'M', puesto: 'Especialista de Procesos', depto: 'Calidad', firma: 'firmado' },
@@ -73,20 +85,44 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
   const [signingParticipant, setSigningParticipant] = useState<Participant | null>(null);
   const [tempSignature, setTempSignature] = useState<string>('');
 
+  // Modal for viewing attached file
+  const [viewingAttachment, setViewingAttachment] = useState<boolean>(false);
+
   // Success Notification state
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
 
-  // Calculated Days difference
+  // Calculate Days difference from dates
   useEffect(() => {
     if (fechaInicio && fechaTermino) {
       const start = new Date(fechaInicio);
       const end = new Date(fechaTermino);
       const diffTime = Math.abs(end.getTime() - start.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-      setNoDias(isNaN(diffDays) ? 1 : diffDays);
+      const calculatedDays = isNaN(diffDays) || diffDays < 1 ? 1 : diffDays;
+      setNoDias(calculatedDays);
+
+      if (autoCalculateHours) {
+        setHorasCapacitacion(calculatedDays * horasPorDia);
+      }
     }
-  }, [fechaInicio, fechaTermino]);
+  }, [fechaInicio, fechaTermino, horasPorDia, autoCalculateHours]);
+
+  // Suggest hours per day based on schedule De / A
+  const calculateHoursFromSchedule = () => {
+    if (horarioDe && horarioA) {
+      const [startH, startM] = horarioDe.split(':').map(Number);
+      const [endH, endM] = horarioA.split(':').map(Number);
+      let diffHours = endH - startH + (endM - startM) / 60;
+      if (diffHours < 0) diffHours += 24;
+      // Round to 1 decimal place
+      const rounded = Math.round(diffHours * 10) / 10;
+      if (rounded > 0) {
+        setHorasPorDia(rounded);
+        setHorasCapacitacion(Math.round(noDias * rounded));
+      }
+    }
+  };
 
   // Calculated Metrics from Participants Table
   const hombresCount = participantes.filter((p) => p.genero === 'H').length;
@@ -94,6 +130,52 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
   const totalParticipantes = participantes.length;
   const horasHombreCapacitacion = horasCapacitacion * totalParticipantes;
   const totalCostos = costoInstructor + costoMateriales + costoCafeteria + otrosCostos;
+
+  // File Upload Handlers (Clip / Drag and Drop)
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  const processFile = (file: File) => {
+    // Format size
+    const sizeStr =
+      file.size > 1024 * 1024
+        ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
+        : `${Math.round(file.size / 1024)} KB`;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64Data = event.target?.result as string;
+      setNombreAdjunto(file.name);
+      setArchivoAdjuntoData(base64Data);
+      setArchivoAdjuntoTamano(sizeStr);
+      setAnexoContenido(true);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveFile = () => {
+    setNombreAdjunto('');
+    setArchivoAdjuntoData('');
+    setArchivoAdjuntoTamano('');
+    setAnexoContenido(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDownloadAttachedFile = () => {
+    if (!archivoAdjuntoData) return;
+    const link = document.createElement('a');
+    link.href = archivoAdjuntoData;
+    link.download = nombreAdjunto || 'documento_adjunto';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Participant Handlers
   const addParticipantRow = () => {
@@ -139,7 +221,6 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
   const removeParticipant = (id: string) => {
     if (participantes.length <= 1) return;
     const filtered = participantes.filter((p) => p.id !== id);
-    // Recalculate Pos consecutive
     const reordered = filtered.map((p, idx) => ({ ...p, pos: idx + 1 }));
     setParticipantes(reordered);
   };
@@ -148,12 +229,13 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
   const prefillSampleData = () => {
     setNombreEvento('Curso de Prevención de Riesgos y Seguridad Operativa 2026');
     setObjetivoEvento('Capacitar al personal operativo en protocolos de seguridad laboral, uso correcto de EPP y prevención de incidentes.');
-    setDirigidoA: 'Técnicos de mantenimiento, supervisores y operadores de planta.';
+    setDirigidoA('Técnicos de mantenimiento, supervisores y operadores de planta.');
     setTipoEvento('Capacitación');
     setUbicacionModalidad('OP');
     setFechaInicio('2026-08-10');
     setFechaTermino('2026-08-12');
     setNoDias(3);
+    setHorasPorDia(8);
     setHorarioDe('08:30');
     setHorarioA('16:30');
     setHorasCapacitacion(24);
@@ -165,6 +247,7 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
 
     setContenidoTematico('Módulo 1: Identificación de actos inseguros. Módulo 2: Procedimientos LOTO. Módulo 3: Primeros Auxilios.');
     setNombreAdjunto('Programa_Seguridad_Agosto_2026.pdf');
+    setArchivoAdjuntoTamano('245 KB');
     setAnexoContenido(true);
     setCostoInstructor(0);
     setCostoMateriales(3500);
@@ -212,6 +295,7 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
       fechaInicio,
       fechaTermino,
       noDias,
+      horasPorDia,
       horarioDe,
       horarioA,
       horasCapacitacion,
@@ -229,6 +313,8 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
       },
       contenidoTematico,
       nombreAdjunto,
+      archivoAdjuntoData,
+      archivoAdjuntoTamano,
       anexoContenido,
       costos: {
         costoInstructor,
@@ -255,6 +341,15 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-16">
+      {/* Hidden Real File Input for the Paperclip */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt"
+        className="hidden"
+      />
+
       {/* Banner & Actions Header */}
       <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-6 rounded-2xl shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="space-y-1">
@@ -273,7 +368,7 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
           <button
             type="button"
             onClick={prefillSampleData}
-            className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-semibold transition-all flex items-center justify-center gap-2 backdrop-blur-md"
+            className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-semibold transition-all flex items-center justify-center gap-2 backdrop-blur-md cursor-pointer"
           >
             <Zap className="w-4 h-4 text-amber-300" /> Cargar Ejemplo
           </button>
@@ -287,7 +382,7 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
           <div>
             <p className="font-bold text-sm">¡Evento y Participantes Registrados Exitosamente!</p>
             <p className="text-xs text-emerald-700">
-              El evento ha sido guardado en el sistema y se ha agregado al Historial de Participantes.
+              El evento ha sido guardado en el sistema y se ha sincronizado con el Historial de Participantes.
             </p>
           </div>
         </div>
@@ -450,35 +545,7 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
                 />
               </div>
 
-              {/* Número de Días & Horarios */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                    Número de Días
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={noDias}
-                    onChange={(e) => setNoDias(parseInt(e.target.value) || 1)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 text-sm font-semibold bg-slate-50 text-center"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                    Horas Totales
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={horasCapacitacion}
-                    onChange={(e) => setHorasCapacitacion(parseInt(e.target.value) || 1)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 text-sm font-semibold text-center"
-                  />
-                </div>
-              </div>
-
+              {/* Horarios De / A */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-1">
@@ -488,6 +555,7 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
                     type="time"
                     value={horarioDe}
                     onChange={(e) => setHorarioDe(e.target.value)}
+                    onBlur={calculateHoursFromSchedule}
                     className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-slate-900 text-sm"
                   />
                 </div>
@@ -500,30 +568,106 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
                     type="time"
                     value={horarioA}
                     onChange={(e) => setHorarioA(e.target.value)}
+                    onBlur={calculateHoursFromSchedule}
                     className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-slate-900 text-sm"
                   />
                 </div>
               </div>
 
-              {/* Métricas de Horas Display Banner */}
-              <div className="md:col-span-2 p-4 rounded-xl bg-slate-900 text-white flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-lg bg-blue-600 text-white">
-                    <Clock className="w-5 h-5" />
+              {/* Días y Horas diarias con cálculo automático */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    No. Días
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={noDias}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1;
+                      setNoDias(val);
+                      if (autoCalculateHours) {
+                        setHorasCapacitacion(val * horasPorDia);
+                      }
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-slate-900 text-sm font-semibold bg-slate-50 text-center"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    Hrs / Día
+                  </label>
+                  <input
+                    type="number"
+                    min={0.5}
+                    step={0.5}
+                    value={horasPorDia}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
+                      setHorasPorDia(val);
+                      if (autoCalculateHours) {
+                        setHorasCapacitacion(Math.round(noDias * val));
+                      }
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-slate-900 text-sm font-semibold text-center"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      Hrs Totales
+                    </label>
                   </div>
-                  <div>
-                    <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                      Métricas Calculadas de Horas
-                    </span>
-                    <p className="text-sm font-semibold text-white">
-                      {horasCapacitacion} hrs por participante • {totalParticipantes} participantes registrados
+                  <input
+                    type="number"
+                    min={1}
+                    value={horasCapacitacion}
+                    onChange={(e) => {
+                      setAutoCalculateHours(false);
+                      setHorasCapacitacion(parseInt(e.target.value) || 1);
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl border border-blue-300 bg-blue-50/40 text-blue-900 text-sm font-bold text-center"
+                  />
+                </div>
+              </div>
+
+              {/* Explicación y desglose de Horas y Horas-Hombre */}
+              <div className="md:col-span-2 p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-md space-y-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-700/80">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-blue-600 text-white">
+                      <Calculator className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-blue-300 uppercase tracking-wider">
+                        Cálculo Preciso de Horas y Horas-Hombre
+                      </span>
+                      <p className="text-xs text-slate-300">
+                        {noDias} día(s) × {horasPorDia} hrs/día = <strong className="text-white">{horasCapacitacion} horas totales de capacitación</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-left sm:text-right">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold">Total Horas-Hombre</span>
+                    <p className="text-2xl font-black text-emerald-400">
+                      {horasHombreCapacitacion} <span className="text-xs font-normal text-slate-300">hrs-hombre</span>
                     </p>
                   </div>
                 </div>
 
-                <div className="text-right sm:border-l sm:border-slate-800 sm:pl-6">
-                  <span className="text-[11px] text-blue-400 uppercase font-semibold">Total Horas-Hombre</span>
-                  <p className="text-2xl font-black text-white">{horasHombreCapacitacion} <span className="text-xs font-normal text-slate-400">hrs-hombre</span></p>
+                {/* Formula Breakdown explanation card */}
+                <div className="bg-slate-950/60 rounded-xl p-3 text-[11px] text-slate-300 flex flex-wrap items-center justify-between gap-2 border border-slate-700/50">
+                  <span className="flex items-center gap-1.5 text-slate-200">
+                    <HelpCircle className="w-3.5 h-3.5 text-blue-400" />
+                    <strong>Fórmula Oficial:</strong> ({horasCapacitacion} hrs evento) × ({totalParticipantes} participantes registrados) = {horasHombreCapacitacion} Horas-Hombre
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-800">
+                    {hombresCount} Hombres + {mujeresCount} Mujeres
+                  </span>
                 </div>
               </div>
             </div>
@@ -650,7 +794,7 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
             </div>
             <div>
               <h3 className="font-bold text-base text-slate-900">3. Administración de Recursos y Costos</h3>
-              <p className="text-xs text-slate-500">Contenido temático, archivos adjuntos, desglose financiero y aprobación RH</p>
+              <p className="text-xs text-slate-500">Contenido temático, archivos adjuntos, desglose financiero con formato numérico y aprobación RH</p>
             </div>
           </div>
 
@@ -669,100 +813,148 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
               />
             </div>
 
-            {/* Anexo de Contenido Temático & Adjunto */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id={anexoCheckboxId}
-                  checked={anexoContenido}
-                  onChange={(e) => setAnexoContenido(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
-                />
-                <label htmlFor={anexoCheckboxId} className="text-xs font-semibold text-slate-800 cursor-pointer select-none">
-                  Anexo de Contenido Temático (Checkbox: Se anexa documento)
-                </label>
+            {/* Anexo de Contenido Temático & Real File Attachment */}
+            <div className="space-y-3 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id={anexoCheckboxId}
+                    checked={anexoContenido}
+                    onChange={(e) => setAnexoContenido(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <label htmlFor={anexoCheckboxId} className="text-xs font-bold text-slate-800 cursor-pointer select-none">
+                    Se Anexa Contenido Temático / Documento Oficial
+                  </label>
+                </div>
+
+                {/* Clip Action Button */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                  title="Haga clic en el clip para seleccionar y cargar cualquier archivo de su computadora"
+                >
+                  <Paperclip className="w-4 h-4" />
+                  <span>{nombreAdjunto ? 'Cambiar Archivo' : 'Cargar Archivo (Clip)'}</span>
+                </button>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Paperclip className="w-4 h-4 text-slate-500 shrink-0" />
-                <input
-                  type="text"
-                  value={nombreAdjunto}
-                  onChange={(e) => setNombreAdjunto(e.target.value)}
-                  placeholder="Nombre de archivo adjunto (ej. Temario.pdf)"
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white"
-                />
-              </div>
+              {/* Display Attached File Info Card */}
+              {nombreAdjunto ? (
+                <div className="mt-2 p-3 bg-white rounded-xl border border-blue-200 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-blue-100 text-blue-700">
+                      <File className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-xs text-slate-900 truncate max-w-xs">{nombreAdjunto}</p>
+                      <p className="text-[10px] text-slate-500">
+                        {archivoAdjuntoTamano || 'Documento adjunto'} • Listo para anexar al reporte
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {archivoAdjuntoData && (
+                      <button
+                        type="button"
+                        onClick={() => setViewingAttachment(true)}
+                        className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> Ver
+                      </button>
+                    )}
+
+                    {archivoAdjuntoData && (
+                      <button
+                        type="button"
+                        onClick={handleDownloadAttachedFile}
+                        className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" /> Descargar
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleRemoveFile}
+                      className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      title="Eliminar archivo"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-2 border-2 border-dashed border-slate-300 rounded-xl p-4 text-center hover:border-blue-400 hover:bg-blue-50/20 transition-all cursor-pointer"
+                >
+                  <Paperclip className="w-5 h-5 mx-auto text-slate-400 mb-1" />
+                  <p className="text-xs font-semibold text-slate-700">
+                    Haga clic en el clip o aquí para cargar el archivo del temario
+                  </p>
+                  <p className="text-[10px] text-slate-400">
+                    Formatos soportados: PDF, Word (.docx), Excel (.xlsx), Imágenes (.png, .jpg)
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* Desglose de Costos */}
+            {/* Desglose de Costos con CurrencyInput Formateado */}
             <div className="space-y-3 pt-2">
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                <DollarSign className="w-4 h-4 text-emerald-600" /> Desglose de Costos ($)
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-emerald-600" /> Desglose de Costos ($ MXN)
+                </h4>
+                <span className="text-[10px] text-slate-500">
+                  Valores con formato numérico sin ceros iniciales molestos
+                </span>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-slate-600">
-                    Costo Instructor ($)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={costoInstructor}
-                    onChange={(e) => setCostoInstructor(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold"
-                  />
-                </div>
+                <CurrencyInput
+                  id="costoInstructor"
+                  label="Costo Instructor ($)"
+                  value={costoInstructor}
+                  onChange={setCostoInstructor}
+                  placeholder="0.00"
+                />
 
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-slate-600">
-                    Costo Materiales ($)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={costoMateriales}
-                    onChange={(e) => setCostoMateriales(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold"
-                  />
-                </div>
+                <CurrencyInput
+                  id="costoMateriales"
+                  label="Costo Materiales ($)"
+                  value={costoMateriales}
+                  onChange={setCostoMateriales}
+                  placeholder="0.00"
+                />
 
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-slate-600">
-                    Costo Cafetería ($)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={costoCafeteria}
-                    onChange={(e) => setCostoCafeteria(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold"
-                  />
-                </div>
+                <CurrencyInput
+                  id="costoCafeteria"
+                  label="Costo Cafetería ($)"
+                  value={costoCafeteria}
+                  onChange={setCostoCafeteria}
+                  placeholder="0.00"
+                />
 
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-slate-600">
-                    Otros Costos ($)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={otrosCostos}
-                    onChange={(e) => setOtrosCostos(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold"
-                  />
-                </div>
+                <CurrencyInput
+                  id="otrosCostos"
+                  label="Otros Costos ($)"
+                  value={otrosCostos}
+                  onChange={setOtrosCostos}
+                  placeholder="0.00"
+                />
               </div>
 
               {/* Total Costos Display */}
-              <div className="p-4 rounded-xl bg-emerald-950 text-emerald-100 flex items-center justify-between border border-emerald-800">
+              <div className="p-4 rounded-xl bg-emerald-950 text-emerald-100 flex items-center justify-between border border-emerald-800 shadow-sm">
                 <span className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
-                  Total de Costos (Cálculo Automático)
+                  Total de Costos (Suma Automática)
                 </span>
                 <span className="text-2xl font-black text-emerald-400">
-                  ${totalCostos.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
+                  ${totalCostos.toLocaleString('es-MX', { minimumFractionDigits: 2 })} <span className="text-xs font-normal text-emerald-300">MXN</span>
                 </span>
               </div>
             </div>
@@ -793,7 +985,7 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
                   4. Lista de Asistencia / Colegas Participantes
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Tabla dinámica/repetitiva de asistencia (Soporta desde 1 hasta 57+ registros)
+                  Tabla dinámica de asistencia (Soporta desde 1 hasta 57+ registros)
                 </p>
               </div>
             </div>
@@ -802,14 +994,14 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
               <button
                 type="button"
                 onClick={addParticipantRow}
-                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors flex items-center gap-1 shadow-xs"
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" /> Agregar 1
               </button>
               <button
                 type="button"
                 onClick={() => addMultipleRows(5)}
-                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1 border border-slate-300"
+                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1 border border-slate-300 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" /> +5 Filas
               </button>
@@ -982,7 +1174,7 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
                           onClick={() => removeParticipant(p.id)}
                           disabled={participantes.length <= 1}
                           title="Eliminar fila"
-                          className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-30"
+                          className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-30 cursor-pointer"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -1003,14 +1195,14 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
                 <button
                   type="button"
                   onClick={addParticipantRow}
-                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5 text-blue-600" /> +1 Fila
                 </button>
                 <button
                   type="button"
                   onClick={() => addMultipleRows(10)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5 text-blue-600" /> +10 Filas
                 </button>
@@ -1048,7 +1240,7 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
               </div>
               <button
                 onClick={() => setSigningParticipant(null)}
-                className="text-slate-400 hover:text-white p-1"
+                className="text-slate-400 hover:text-white p-1 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1104,6 +1296,55 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE VISTA PREVIA DE ARCHIVO ADJUNTO */}
+      {viewingAttachment && archivoAdjuntoData && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden space-y-4">
+            <div className="bg-slate-900 text-white p-4 px-5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <File className="w-5 h-5 text-blue-400" />
+                <h3 className="font-bold text-sm text-white truncate">{nombreAdjunto}</h3>
+              </div>
+              <button
+                onClick={() => setViewingAttachment(false)}
+                className="text-slate-400 hover:text-white p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 max-h-[70vh] overflow-y-auto flex flex-col items-center justify-center">
+              {archivoAdjuntoData.startsWith('data:image') ? (
+                <img src={archivoAdjuntoData} alt={nombreAdjunto} className="max-h-96 max-w-full rounded-xl object-contain shadow-md" />
+              ) : (
+                <div className="p-8 text-center space-y-3 bg-slate-50 rounded-2xl border border-slate-200 w-full">
+                  <File className="w-16 h-16 text-blue-600 mx-auto" />
+                  <p className="font-bold text-slate-800 text-sm">{nombreAdjunto}</p>
+                  <p className="text-xs text-slate-500">{archivoAdjuntoTamano} • Archivo cargado correctamente</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleDownloadAttachedFile}
+                className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-4 h-4" /> Descargar Archivo
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewingAttachment(false)}
+                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-semibold cursor-pointer"
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         </div>
