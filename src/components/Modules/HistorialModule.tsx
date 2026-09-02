@@ -5,6 +5,7 @@ import {
   exportAllEventosToExcel,
   exportEventoToPdf,
   exportAllEventosToPdf,
+  exportChangeLogReportToPdf,
 } from '../../utils/exporter';
 import {
   Search,
@@ -425,6 +426,15 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
               title="Exportar todos los eventos a PDF (.pdf)"
             >
               <FileText className="w-3.5 h-3.5" /> PDF
+            </button>
+
+            <button
+              onClick={() => exportChangeLogReportToPdf()}
+              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              title="Descargar informe y checklist de cambios realizados para el cliente en PDF"
+            >
+              <Award className="w-3.5 h-3.5 text-slate-950" />
+              <span>Checklist Cambios (PDF)</span>
             </button>
           </div>
         </div>

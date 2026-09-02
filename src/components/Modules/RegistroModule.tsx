@@ -2,6 +2,7 @@ import React, { useState, useEffect, useId, useRef } from 'react';
 import { EventoData, Participant, TipoEvento, UbicacionModalidad, TipoInstructor, Genero } from '../../types';
 import { SignatureCanvas } from '../SignatureCanvas';
 import { CurrencyInput } from '../CurrencyInput';
+import { getNextEventoId } from '../../utils/storage';
 import {
   Plus,
   Trash2,
@@ -39,6 +40,7 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Datos Generales del Evento
+  const [idEvento, setIdEvento] = useState<string>(() => getNextEventoId(new Date().getFullYear()));
   const [nombreEvento, setNombreEvento] = useState('');
   const [objetivoEvento, setObjetivoEvento] = useState('');
   const [dirigidoA, setDirigidoA] = useState('');
@@ -285,8 +287,11 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
 
     setErrors([]);
 
+    const startYear = parseInt(fechaInicio.split('-')[0]) || new Date().getFullYear();
+    const finalEventId = idEvento.trim() || getNextEventoId(startYear);
+
     const nuevoEvento: EventoData = {
-      id: `EVT-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      id: finalEventId,
       nombreEvento,
       objetivoEvento,
       dirigidoA,
@@ -415,6 +420,41 @@ export const RegistroModule: React.FC<RegistroModuleProps> = ({ onSaveEvento }) 
 
           <div className="p-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Folio / ID del Evento Consecutivo */}
+              <div className="md:col-span-2 p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Folio / ID Oficial del Evento:</span>
+                    <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-md border border-blue-200">
+                      Consecutivo Anual Oficial
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Numeración consecutiva por año (ejemplo: EVT-2026-1, EVT-2026-2... e inicia en EVT-2027-1 cada año nuevo).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <input
+                    type="text"
+                    value={idEvento}
+                    onChange={(e) => setIdEvento(e.target.value.toUpperCase())}
+                    placeholder="EVT-2026-1"
+                    className="w-full sm:w-44 px-3 py-1.5 rounded-lg border border-slate-300 font-mono font-bold text-slate-900 text-sm bg-white text-center focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const yr = parseInt(fechaInicio.split('-')[0]) || new Date().getFullYear();
+                      setIdEvento(getNextEventoId(yr));
+                    }}
+                    title="Recalcular siguiente consecutivo automático"
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold cursor-pointer whitespace-nowrap"
+                  >
+                    Auto
+                  </button>
+                </div>
+              </div>
+
               {/* Nombre del Evento */}
               <div className="md:col-span-2 space-y-1.5">
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">

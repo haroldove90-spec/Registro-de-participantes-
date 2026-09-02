@@ -12,6 +12,31 @@ const STORAGE_KEY_EVENTOS = 'registro_participantes_eventos_v1';
 const STORAGE_KEY_PROFILE = 'registro_participantes_profile_v1';
 const STORAGE_KEY_SESSION = 'registro_participantes_auth_session_v1';
 
+/**
+ * Calculates the next consecutive event ID for a given year (e.g. EVT-2026-1, EVT-2026-2, EVT-2027-1).
+ */
+export function getNextEventoId(year?: number): string {
+  const targetYear = year || new Date().getFullYear();
+  const eventos = getStoredEventos();
+  
+  // Find all events matching format EVT-YYYY-N for the target year
+  const regex = new RegExp(`^EVT-${targetYear}-(\\d+)$`, 'i');
+  let maxSeq = 0;
+
+  eventos.forEach((evt) => {
+    if (!evt.id) return;
+    const match = evt.id.match(regex);
+    if (match && match[1]) {
+      const seq = parseInt(match[1], 10);
+      if (!isNaN(seq) && seq > maxSeq) {
+        maxSeq = seq;
+      }
+    }
+  });
+
+  return `EVT-${targetYear}-${maxSeq + 1}`;
+}
+
 export function getStoredEventos(): EventoData[] {
   try {
     const data = localStorage.getItem(STORAGE_KEY_EVENTOS);
