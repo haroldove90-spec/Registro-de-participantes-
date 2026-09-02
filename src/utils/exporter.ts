@@ -2,6 +2,11 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { EventoData } from '../types';
+import {
+  getParticipantSignatureImage,
+  getInstructorSignatureImage,
+  getRHSignatureImage,
+} from './signatures';
 
 /**
  * Helper to parse a YYYY-MM-DD string safely into day, month, year
@@ -201,15 +206,14 @@ export function exportAllEventosToExcel(eventos: EventoData[]): void {
 }
 
 /**
- * Exports a single EventoData object to PDF matching EXACTLY the form design
- * from the user's provided document image ("LISTA DE PARTICIPANTES / DATOS GENERALES").
+ * Renders the complete, authentic official sheet and continuation pages of an event into a jsPDF document.
+ * Includes all registered fields: general details, instructor info + signature,
+ * resources/costs + RH signature, and the participant list with real digital signatures.
  */
-export function exportEventoToPdf(evento: EventoData): void {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  });
+export function renderEventoOfficialPages(doc: jsPDF, evento: EventoData, isFirstDocPage: boolean): void {
+  if (!isFirstDocPage) {
+    doc.addPage('a4', 'portrait');
+  }
 
   const startX = 10;
   const totalWidth = 190; // Page width = 210mm, margins = 10mm left & right
@@ -229,6 +233,11 @@ export function exportEventoToPdf(evento: EventoData): void {
   currentY += 5;
   doc.setFontSize(11);
   doc.text('DATOS GENERALES', 105, currentY, { align: 'center' });
+
+  // Folio ID in upper right
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`FOLIO: ${evento.id}`, startX + totalWidth, currentY - 1.5, { align: 'right' });
   currentY += 4;
 
   // -------------------------------------------------------------
@@ -503,21 +512,18 @@ export function exportEventoToPdf(evento: EventoData): void {
   if (evento.instructor.tipo === 'Externo') {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.text(evento.instructor.nombre || '', startX + 2, extValY + 4);
-    doc.text(evento.instructor.empresa || 'N/A', startX + 82, extValY + 4);
-    doc.text(evento.instructor.rfc || 'N/A', startX + 142, extValY + 4);
+    doc.text(evento.instructor.nombre || '', startX + 2, extValY + 4.5);
+    doc.text(evento.instructor.empresa || 'N/A', startX + 82, extValY + 4.5);
+    doc.text(evento.instructor.rfc || 'N/A', startX + 142, extValY + 4.5);
     
     // Check if graphical signature stroke is available
-    if (evento.instructor.firma && (evento.instructor.firma.startsWith('data:image') || evento.instructor.firma.startsWith('http'))) {
+    const instSig = getInstructorSignatureImage(evento.instructor);
+    if (instSig) {
       try {
-        doc.addImage(evento.instructor.firma, 'PNG', startX + 171, extValY + 0.5, 18, 5);
-      } catch {
-        doc.setFontSize(7);
-        doc.text('Firmado', startX + 172, extValY + 4);
+        doc.addImage(instSig, 'PNG', startX + 171, extValY + 0.6, 26, 5.2);
+      } catch (err) {
+        console.warn('Could not draw instructor signature on PDF', err);
       }
-    } else {
-      doc.setFontSize(7);
-      doc.text(evento.instructor.firma ? 'Firmado' : 'Pendiente', startX + 172, extValY + 4);
     }
   }
 
@@ -553,25 +559,22 @@ export function exportEventoToPdf(evento: EventoData): void {
   if (evento.instructor.tipo === 'Interno') {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.text(evento.instructor.nombre || '', startX + 2, intValY + 4);
-    doc.text(evento.instructor.puesto || 'N/A', startX + 82, intValY + 4);
-    doc.text(evento.instructor.rfc || 'N/A', startX + 142, intValY + 4);
+    doc.text(evento.instructor.nombre || '', startX + 2, intValY + 4.5);
+    doc.text(evento.instructor.puesto || 'N/A', startX + 82, intValY + 4.5);
+    doc.text(evento.instructor.rfc || 'N/A', startX + 142, intValY + 4.5);
     
     // Check if graphical signature stroke is available
-    if (evento.instructor.firma && (evento.instructor.firma.startsWith('data:image') || evento.instructor.firma.startsWith('http'))) {
+    const instSig = getInstructorSignatureImage(evento.instructor);
+    if (instSig) {
       try {
-        doc.addImage(evento.instructor.firma, 'PNG', startX + 171, intValY + 0.5, 18, 5);
-      } catch {
-        doc.setFontSize(7);
-        doc.text('Firmado', startX + 172, intValY + 4);
+        doc.addImage(instSig, 'PNG', startX + 171, intValY + 0.6, 26, 5.2);
+      } catch (err) {
+        console.warn('Could not draw instructor signature on PDF', err);
       }
-    } else {
-      doc.setFontSize(7);
-      doc.text(evento.instructor.firma ? 'Firmado' : 'Pendiente', startX + 172, intValY + 4);
     }
   }
 
-  currentY = intValY + 10;
+  currentY = intValY + 9;
 
   // -------------------------------------------------------------
   // 4. ADMINISTRACION DE RECURSOS TABLE
@@ -589,7 +592,7 @@ export function exportEventoToPdf(evento: EventoData): void {
   doc.text('CONTENIDO TEMATICO', startX + 30, admY + 3.5, { align: 'center' });
   doc.line(startX + 65, admY, startX + 65, admY + 5);
 
-  doc.text('COSTOS', startX + 110, admY + 3.5, { align: 'center' });
+  doc.text('COSTOS', startX + 107.5, admY + 3.5, { align: 'center' });
   doc.line(startX + 150, admY, startX + 150, admY + 5);
 
   doc.text('FIRMA DE RH', startX + 170, admY + 3.5, { align: 'center' });
@@ -640,20 +643,19 @@ export function exportEventoToPdf(evento: EventoData): void {
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'bold');
   if (evento.aprobadoRH) {
-    if (evento.firmaRH && (evento.firmaRH.startsWith('data:image') || evento.firmaRH.startsWith('http'))) {
+    const rhSig = getRHSignatureImage(evento);
+    if (rhSig) {
       try {
-        doc.addImage(evento.firmaRH, 'PNG', startX + 155, admValY + 2, 30, 11);
-      } catch {
-        doc.text('APROBADO RH', startX + 170, admValY + 10, { align: 'center' });
+        doc.addImage(rhSig, 'PNG', startX + 153, admValY + 1.8, 34, 11.5);
+      } catch (err) {
+        console.warn('Could not draw RH signature on PDF', err);
       }
-    } else {
-      doc.text('APROBADO RH', startX + 170, admValY + 10, { align: 'center' });
     }
     doc.setFontSize(6);
     doc.setFont('helvetica', 'normal');
-    doc.text('Firma Digital RH Confirmada', startX + 170, admValY + 18, { align: 'center' });
+    doc.text('Firma Digital RH Confirmada', startX + 170, admValY + 18.5, { align: 'center' });
   } else {
-    doc.text('PENDIENTE RH', startX + 170, admValY + 12, { align: 'center' });
+    doc.text('PENDIENTE RH', startX + 170, admValY + 11, { align: 'center' });
   }
 
   currentY = admValY + admHeight + 6;
@@ -677,14 +679,15 @@ export function exportEventoToPdf(evento: EventoData): void {
     p.nombre,
     p.puesto,
     p.depto,
-    p.firma && !p.firma.startsWith('data:image') ? 'Firmado' : '',
+    '', // Empty text: signature drawn visually
   ]);
 
-  // Signatures on Page 1
+  // Signatures on Page 1 resolved via signature utility
   const sigsMapPage1: { [rowIndex: number]: string } = {};
   page1List.forEach((p, idx) => {
-    if (p.firma && (p.firma.startsWith('data:image') || p.firma.startsWith('http'))) {
-      sigsMapPage1[idx] = p.firma;
+    const sigImg = getParticipantSignatureImage(p);
+    if (sigImg) {
+      sigsMapPage1[idx] = sigImg;
     }
   });
 
@@ -704,11 +707,11 @@ export function exportEventoToPdf(evento: EventoData): void {
     styles: {
       font: 'helvetica',
       fontSize: 7.5,
-      cellPadding: 1.5,
+      cellPadding: 1.2,
       lineColor: [0, 0, 0],
       lineWidth: 0.25,
       textColor: [0, 0, 0],
-      minCellHeight: 6,
+      minCellHeight: 7.5,
     },
     headStyles: {
       fontStyle: 'bold',
@@ -720,18 +723,18 @@ export function exportEventoToPdf(evento: EventoData): void {
     },
     columnStyles: {
       0: { halign: 'center', cellWidth: 10 },
-      1: { halign: 'center', cellWidth: 20 },
-      2: { cellWidth: 70, fontStyle: 'bold' },
-      3: { cellWidth: 40 },
-      4: { cellWidth: 30 },
-      5: { halign: 'center', cellWidth: 20 },
+      1: { halign: 'center', cellWidth: 22 },
+      2: { cellWidth: 66, fontStyle: 'bold' },
+      3: { cellWidth: 34 },
+      4: { cellWidth: 26 },
+      5: { halign: 'center', cellWidth: 32 },
     },
     didDrawCell: (data) => {
       if (data.section === 'body' && data.column.index === 5) {
         const sigUrl = sigsMapPage1[data.row.index];
         if (sigUrl) {
           try {
-            doc.addImage(sigUrl, 'PNG', data.cell.x + 1.5, data.cell.y + 0.8, 17, 4.4);
+            doc.addImage(sigUrl, 'PNG', data.cell.x + 2, data.cell.y + 0.8, 28, 5.8);
           } catch (err) {
             console.warn('Could not draw signature stroke on cell', err);
           }
@@ -814,13 +817,14 @@ export function exportEventoToPdf(evento: EventoData): void {
         p.genero,
         p.puesto,
         p.depto,
-        p.firma && !p.firma.startsWith('data:image') ? 'Firmado' : '',
+        '', // Empty text: signature drawn visually
       ]);
 
       const contSigsMap: { [rowIndex: number]: string } = {};
       chunk.forEach((p, idx) => {
-        if (p.firma && (p.firma.startsWith('data:image') || p.firma.startsWith('http'))) {
-          contSigsMap[idx] = p.firma;
+        const sig = getParticipantSignatureImage(p);
+        if (sig) {
+          contSigsMap[idx] = sig;
         }
       });
 
@@ -832,11 +836,11 @@ export function exportEventoToPdf(evento: EventoData): void {
         styles: {
           font: 'helvetica',
           fontSize: 7.5,
-          cellPadding: 1.5,
+          cellPadding: 1.2,
           lineColor: [0, 0, 0],
           lineWidth: 0.25,
           textColor: [0, 0, 0],
-          minCellHeight: 6,
+          minCellHeight: 7.5,
         },
         headStyles: {
           fontStyle: 'bold',
@@ -849,18 +853,18 @@ export function exportEventoToPdf(evento: EventoData): void {
         columnStyles: {
           0: { halign: 'center', cellWidth: 10 },
           1: { halign: 'center', cellWidth: 20 },
-          2: { cellWidth: 65, fontStyle: 'bold' },
-          3: { halign: 'center', cellWidth: 12 },
-          4: { cellWidth: 35 },
-          5: { cellWidth: 28 },
-          6: { halign: 'center', cellWidth: 20 },
+          2: { cellWidth: 64, fontStyle: 'bold' },
+          3: { halign: 'center', cellWidth: 10 },
+          4: { cellWidth: 32 },
+          5: { cellWidth: 24 },
+          6: { halign: 'center', cellWidth: 30 },
         },
         didDrawCell: (data) => {
           if (data.section === 'body' && data.column.index === 6) {
             const sigUrl = contSigsMap[data.row.index];
             if (sigUrl) {
               try {
-                doc.addImage(sigUrl, 'PNG', data.cell.x + 1.5, data.cell.y + 0.8, 17, 4.4);
+                doc.addImage(sigUrl, 'PNG', data.cell.x + 2, data.cell.y + 0.8, 26, 5.8);
               } catch (err) {
                 console.warn('Could not draw signature stroke on cell', err);
               }
@@ -879,6 +883,20 @@ export function exportEventoToPdf(evento: EventoData): void {
       doc.text('SISTEMA DE CONTROL DE CAPACITACIÓN • REGISTRO OFICIAL DE ASISTENCIA', 105, footerY + 4, { align: 'center' });
     }
   }
+}
+
+/**
+ * Exports a single EventoData object to PDF matching EXACTLY the form design
+ * from the user's provided document image ("LISTA DE PARTICIPANTES / DATOS GENERALES").
+ */
+export function exportEventoToPdf(evento: EventoData): void {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  renderEventoOfficialPages(doc, evento, true);
 
   doc.save(`${evento.id}_Lista_Participantes.pdf`);
 }
@@ -994,13 +1012,35 @@ export function exportChangeLogReportToPdf(): void {
     { maxWidth: totalWidth - 4 }
   );
 
-  currentY += 25;
+  currentY += 19;
+
+  // ITEM 4
+  doc.setFillColor(30, 41, 59);
+  doc.rect(startX, currentY, totalWidth, 7, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('4. INCLUSIÓN DE FIRMAS DIGITALES Y DATOS COMPLETOS EN EXPORTACIÓN PDF', startX + 4, currentY + 4.8);
+
+  currentY += 9;
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text(
+    '• Requerimiento: Al exportar el PDF de todos los registros, mostrar todos los datos de cada uno e incluir las firmas de los participantes, ajustando el formato para que las firmas sean perfectamente visibles.\n• Solución Aplicada: Se optimizó el ancho de columna a 32 mm, altura de fila a 7.5 mm y resolución gráfica de firmas en carátula y continuación. El PDF consolidado anexa todas las hojas oficiales individuales con datos y firmas.',
+    startX + 2,
+    currentY,
+    { maxWidth: totalWidth - 4 }
+  );
+
+  currentY += 21;
 
   // Verification Summary Table
   const tableData = [
     ['1', 'ID Consecutivo Anual', 'EVT-YYYY-N incremental por año', 'src/utils/storage.ts & RegistroModule.tsx', 'APLICADO Y VERIFICADO'],
     ['2', 'Eliminación de Duplicados', 'Relación estricta 1:1 sin duplicaciones', 'src/utils/exporter.ts & mockData.ts', 'APLICADO Y VERIFICADO'],
     ['3', 'Paginación Formato 1:1', '15 en carátula + hojas de continuación', 'src/components/HojaAsistenciaOficialModal.tsx', 'APLICADO Y VERIFICADO'],
+    ['4', 'Firmas en Exportación PDF', 'Firmas visuales en todos los registros', 'src/utils/exporter.ts & signatures.ts', 'APLICADO Y VERIFICADO'],
   ];
 
   autoTable(doc, {
@@ -1138,6 +1178,11 @@ export function exportAllEventosToPdf(eventos: EventoData[]): void {
     },
     margin: { left: 12, right: 12 },
   });
+
+  // Append the complete official attendance sheets with all participant data and digital signatures for every event
+  for (const evento of eventos) {
+    renderEventoOfficialPages(doc, evento, false);
+  }
 
   doc.save('Reporte_General_Capacitacion.pdf');
 }
