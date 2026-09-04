@@ -559,24 +559,22 @@ WHERE LOWER(email) = LOWER('${targetEmail.trim()}');`;
               {/* Roles Reference Table */}
               <div className="space-y-2">
                 <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-indigo-600" /> Roles y Permisos Disponibles en el Sistema:
+                  <Shield className="w-3.5 h-3.5 text-indigo-600" /> Roles Oficiales del Sistema (Estrictamente 2):
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
-                    <p className="font-bold text-purple-700">Administrador de Capacitación</p>
-                    <p className="text-[11px] text-slate-500">Acceso total, configuración, gestión de roles y auditoría.</p>
+                  <div className="p-3 rounded-xl border border-purple-200 bg-purple-50/60">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="font-bold text-purple-900">Admin</p>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-200 text-purple-800 font-bold">Total</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600">Acceso total, edición/borrado de eventos, desactivación de registros y gestión de coordinadores.</p>
                   </div>
-                  <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
-                    <p className="font-bold text-blue-700">Coordinador de Capacitación</p>
-                    <p className="text-[11px] text-slate-500">Creación de eventos, presupuestos y control de participantes.</p>
-                  </div>
-                  <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
-                    <p className="font-bold text-emerald-700">Instructor / Capacitador</p>
-                    <p className="text-[11px] text-slate-500">Control de asistencia de sus cursos y firma digital.</p>
-                  </div>
-                  <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
-                    <p className="font-bold text-amber-700">Recursos Humanos (RH)</p>
-                    <p className="text-[11px] text-slate-500">Aprobación de constancias y validación de horas-hombre.</p>
+                  <div className="p-3 rounded-xl border border-blue-200 bg-blue-50/60">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="font-bold text-blue-900">Coordinadores</p>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-200 text-blue-800 font-bold">Operativo</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600">Creación de eventos, captura de listas de asistencia y cálculo de costos. Sin permisos de borrado.</p>
                   </div>
                 </div>
               </div>

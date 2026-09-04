@@ -33,13 +33,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [rememberSession, setRememberSession] = useState(true);
 
-  // Optional quick-select demo pills for effortless testing
-  const handleSelectQuickCred = (usuario: string, clave: string) => {
-    setIdentifier(usuario);
-    setPassword(clave);
-    setErrorMessage('');
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -74,7 +67,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       }
 
       setErrorMessage(
-        'Usuario, correo o contraseña incorrectos. Verifica tus credenciales o utiliza los accesos directos configurados.'
+        'Usuario, correo o contraseña incorrectos. Verifica tus datos de acceso con el Administrador.'
       );
     } catch (err: any) {
       setErrorMessage(err?.message || 'Error al validar las credenciales.');
@@ -139,7 +132,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   type="text"
                   required
                   autoFocus
-                  placeholder="ej. haroldo90 o cesar_netro"
+                  placeholder="Ingresa tu usuario o correo electrónico"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-slate-950/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder:text-slate-500"
@@ -205,52 +198,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               )}
             </button>
           </form>
-
-          {/* Quick Credential Selector for Instant Testing */}
-          <div className="mt-6 pt-5 border-t border-slate-800/80">
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider text-center mb-3">
-              Credenciales Activas (Clic para rellenar)
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleSelectQuickCred('haroldo90', 'Chevropar#1970')}
-                className="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 hover:border-purple-500/50 text-left transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white group-hover:text-purple-300">
-                    Harold Anguiano
-                  </span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-semibold">
-                    Admin
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-400 font-mono mt-0.5">haroldo90</p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectQuickCred('cesar_netro', 'Netro#Coord2026!')}
-                className="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 hover:border-blue-500/50 text-left transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white group-hover:text-blue-300">
-                    Cesar Netro
-                  </span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-semibold">
-                    Coordinador
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-400 font-mono mt-0.5">cesar_netro</p>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Footer info */}
         <div className="mt-4 text-center text-slate-500 text-[11px] flex items-center justify-center gap-2">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Acceso seguro • Sincronización entre Admin y Coordinadores</span>
+          <span>Acceso privado y seguro • Sistema de Control de Capacitaciones</span>
         </div>
       </div>
     </div>

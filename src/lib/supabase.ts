@@ -414,6 +414,18 @@ export async function deleteEventoFromSupabase(id: string): Promise<boolean> {
 }
 
 /**
+ * Normalizes any legacy or custom role to the strict 2-role system ('Admin' | 'Coordinadores')
+ */
+export function normalizeUserRole(rawRol?: string): UserRole {
+  if (!rawRol) return 'Coordinadores';
+  const clean = rawRol.toLowerCase().trim();
+  if (clean.includes('admin')) {
+    return 'Admin';
+  }
+  return 'Coordinadores';
+}
+
+/**
  * Fetches user profile from Supabase by email or ID
  */
 export async function fetchUserProfileFromSupabase(emailOrId?: string): Promise<UserProfile | null> {
@@ -448,7 +460,7 @@ export async function fetchUserProfileFromSupabase(emailOrId?: string): Promise<
       departamento: data.departamento || '',
       rfc: data.rfc || '',
       telefono: data.telefono || '',
-      rol: data.rol || 'Coordinador de Capacitación',
+      rol: normalizeUserRole(data.rol),
       avatarUrl: data.avatar_url || '',
       fechaIngreso: data.fecha_ingreso || '',
       notificacionesEmail: data.notificaciones_email ?? true,
@@ -488,7 +500,7 @@ export async function fetchAllUsersFromSupabase(): Promise<UserProfile[]> {
       departamento: item.departamento || '',
       rfc: item.rfc || '',
       telefono: item.telefono || '',
-      rol: item.rol || 'Coordinador de Capacitación',
+      rol: normalizeUserRole(item.rol),
       avatarUrl: item.avatar_url || '',
       fechaIngreso: item.fecha_ingreso || '',
       notificacionesEmail: item.notificaciones_email ?? true,
@@ -504,6 +516,8 @@ export async function fetchAllUsersFromSupabase(): Promise<UserProfile[]> {
  */
 export async function saveUserProfileToSupabase(profile: UserProfile): Promise<boolean> {
   try {
+    const targetRole = normalizeUserRole(profile.rol);
+
     // 1. Update Auth user metadata so it persists in the active Supabase session
     try {
       await supabase.auth.updateUser({
@@ -513,14 +527,14 @@ export async function saveUserProfileToSupabase(profile: UserProfile): Promise<b
           departamento: profile.departamento,
           rfc: profile.rfc,
           telefono: profile.telefono,
-          rol: profile.rol,
+          rol: targetRole,
           avatarUrl: profile.avatarUrl,
         },
       });
     } catch {}
 
     // 2. Upsert into 'perfiles_usuario' table in Supabase PostgreSQL
-    const { error } = await supabase.from('perfiles_usuario').upsert(
+    let { error } = await supabase.from('perfiles_usuario').upsert(
       {
         nombre: profile.nombre,
         email: profile.email,
@@ -528,7 +542,7 @@ export async function saveUserProfileToSupabase(profile: UserProfile): Promise<b
         departamento: profile.departamento,
         rfc: profile.rfc,
         telefono: profile.telefono,
-        rol: profile.rol,
+        rol: targetRole,
         avatar_url: profile.avatarUrl,
         fecha_ingreso: profile.fechaIngreso,
         notificaciones_email: profile.notificacionesEmail,
@@ -536,6 +550,30 @@ export async function saveUserProfileToSupabase(profile: UserProfile): Promise<b
       },
       { onConflict: 'email' }
     );
+
+    // Fallback if Supabase database has not run the updated check constraint yet
+    if (error && error.message && error.message.includes('perfiles_usuario_rol_check')) {
+      const legacyRole = targetRole === 'Admin' ? 'Administrador de Capacitación' : 'Coordinador de Capacitación';
+      const retry = await supabase.from('perfiles_usuario').upsert(
+        {
+          nombre: profile.nombre,
+          email: profile.email,
+          puesto: profile.puesto,
+          departamento: profile.departamento,
+          rfc: profile.rfc,
+          telefono: profile.telefono,
+          rol: legacyRole,
+          avatar_url: profile.avatarUrl,
+          fecha_ingreso: profile.fechaIngreso,
+          notificaciones_email: profile.notificacionesEmail,
+          modo_oscuro: profile.modoOscuro,
+        },
+        { onConflict: 'email' }
+      );
+      if (!retry.error) {
+        return true;
+      }
+    }
 
     if (error) {
       if (isTableMissingError(error)) {

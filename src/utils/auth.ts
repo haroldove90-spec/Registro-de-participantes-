@@ -250,7 +250,7 @@ export function authenticateWithCredentials(
     return {
       success: false,
       error:
-        'Credenciales incorrectas. Verifica tu nombre de usuario (ej. haroldo90, cesar_netro) o correo y tu contraseña.',
+        'Credenciales incorrectas. Verifica tu nombre de usuario o correo y tu contraseña.',
     };
   }
 

@@ -299,7 +299,7 @@ CREATE TABLE IF NOT EXISTS public.perfiles_usuario (
   departamento TEXT DEFAULT 'General',
   rfc TEXT DEFAULT 'XAXX010101000',
   telefono TEXT DEFAULT '',
-  rol TEXT DEFAULT 'Coordinador de Capacitación',
+  rol TEXT DEFAULT 'Coordinadores',
   avatar_url TEXT DEFAULT '',
   fecha_ingreso DATE DEFAULT CURRENT_DATE,
   notificaciones_email BOOLEAN DEFAULT TRUE,
@@ -307,6 +307,20 @@ CREATE TABLE IF NOT EXISTS public.perfiles_usuario (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migración segura de restricción de roles (evita Error 23514 en datos existentes)
+ALTER TABLE public.perfiles_usuario DROP CONSTRAINT IF EXISTS perfiles_usuario_rol_check;
+
+UPDATE public.perfiles_usuario 
+SET rol = CASE 
+    WHEN LOWER(rol) LIKE '%admin%' THEN 'Admin'
+    ELSE 'Coordinadores'
+END
+WHERE rol NOT IN ('Admin', 'Coordinadores') OR rol IS NULL;
+
+ALTER TABLE public.perfiles_usuario 
+ADD CONSTRAINT perfiles_usuario_rol_check 
+CHECK (rol IN ('Admin', 'Coordinadores'));
 
 -- Índice único en email
 CREATE INDEX IF NOT EXISTS idx_perfiles_email ON public.perfiles_usuario(email);
@@ -353,7 +367,7 @@ BEGIN
     COALESCE(NEW.raw_user_meta_data->>'departamento', 'General'),
     COALESCE(NEW.raw_user_meta_data->>'rfc', 'XAXX010101000'),
     COALESCE(NEW.raw_user_meta_data->>'telefono', ''),
-    COALESCE(NEW.raw_user_meta_data->>'rol', 'Coordinador de Capacitación'),
+    COALESCE(NEW.raw_user_meta_data->>'rol', 'Coordinadores'),
     COALESCE(NEW.raw_user_meta_data->>'avatarUrl', '')
   )
   ON CONFLICT (email) DO UPDATE
