@@ -136,41 +136,8 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
   const [coordinadorPuesto, setCoordinadorPuesto] = useState('');
   const [coordinadorWhatsApp, setCoordinadorWhatsApp] = useState('');
 
-  // Mobile / Field Signature collection modal
+  // Mobile / Field Signature collection modal (Supervisor)
   const [viewingFirmaEvento, setViewingFirmaEvento] = useState<EventoData | null>(null);
-  const [copiedLinkNotice, setCopiedLinkNotice] = useState<string | null>(null);
-
-  // Helper to generate personalized event signature link
-  const getEventSignatureLink = (eventoId: string) => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    return `${origin}/?modulo=firmas&eventoId=${encodeURIComponent(eventoId)}`;
-  };
-
-  const handleShareLinkWhatsApp = (evt: EventoData) => {
-    const link = getEventSignatureLink(evt.id);
-    const cleanPhone = (evt.coordinadorWhatsApp || '').replace(/\D/g, '');
-    const message = `📋 *SISTEMA DE CAPACITACIÓN - CONTROL DE ASISTENCIA Y FIRMAS*\n\n` +
-      `Estimado/a *${evt.coordinadorNombre || 'Coordinador(a)'}*,\n` +
-      `Se te ha asignado el evento *${evt.nombreEvento}* (Clave: ${evt.id}).\n\n` +
-      `📅 Fecha: ${evt.fechaInicio} al ${evt.fechaTermino}\n` +
-      `👥 Participantes programados: ${evt.participantes?.length || 0}\n\n` +
-      `Por favor abre el siguiente enlace oficial desde tu celular o tablet para recabar las firmas digitales de los participantes:\n` +
-      `🔗 ${link}\n\n` +
-      `Las firmas se reflejan en tiempo real para el Administrador y el Supervisor.`;
-
-    const waUrl = cleanPhone
-      ? `https://wa.me/${cleanPhone.startsWith('52') ? cleanPhone : '52' + cleanPhone}?text=${encodeURIComponent(message)}`
-      : `https://wa.me/?text=${encodeURIComponent(message)}`;
-
-    window.open(waUrl, '_blank');
-  };
-
-  const handleCopySignatureLink = (evt: EventoData) => {
-    const link = getEventSignatureLink(evt.id);
-    navigator.clipboard.writeText(link);
-    setCopiedLinkNotice(`¡Enlace de firmas para el evento ${evt.id} copiado al portapapeles!`);
-    setTimeout(() => setCopiedLinkNotice(null), 4000);
-  };
 
   // Modal for viewing attachment
   const [viewingAttachment, setViewingAttachment] = useState<boolean>(false);
@@ -796,34 +763,14 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
                           </div>
                         )}
 
-                        {/* WhatsApp con Link Personalizado para el Coordinador */}
-                        <button
-                          onClick={() => handleShareLinkWhatsApp(evt)}
-                          className="px-2.5 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer"
-                          title="Enviar WhatsApp con enlace del evento al coordinador para recabar firmas"
-                        >
-                          <Share2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>WhatsApp</span>
-                        </button>
-
-                        {/* Copiar Enlace de Firmas */}
-                        <button
-                          onClick={() => handleCopySignatureLink(evt)}
-                          className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer"
-                          title="Copiar enlace personalizado de firmas"
-                        >
-                          <Copy className="w-3.5 h-3.5 text-slate-500" />
-                          <span>Link</span>
-                        </button>
-
-                        {/* Modo Firmas Táctil para Tablet / Móvil */}
+                        {/* Modo Firmas Táctil para el Supervisor */}
                         <button
                           onClick={() => setViewingFirmaEvento(evt)}
-                          className="px-2.5 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-800 text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer"
-                          title="Abrir vista de recolección de firmas táctil para este evento"
+                          className="px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+                          title="Abrir pantalla de recolección de firmas de participantes para este evento"
                         >
                           <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>Firmas</span>
+                          <span>Recabar Firmas</span>
                         </button>
 
                         {/* Editar */}
@@ -1367,29 +1314,29 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
 
             {/* Coordinador Asignado para Recabar Firmas */}
             <div className="bg-gradient-to-br from-emerald-50/70 to-teal-50/50 rounded-2xl p-5 border border-emerald-200 space-y-4">
-              <div className="flex items-center gap-2 border-b border-emerald-100 pb-3">
-                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+              <div className="flex items-center gap-2 border-b border-indigo-100 pb-3">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
                   <Smartphone className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-bold text-emerald-950 uppercase tracking-wider">
-                    Coordinador de Campo / Responsable de Recabar Firmas (Opcional)
+                  <h3 className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
+                    Supervisor / Responsable de Recolección de Firmas (Opcional)
                   </h3>
-                  <p className="text-[11px] text-emerald-800 mt-0.5">
-                    Registra al coordinador (nombre, puesto y WhatsApp) para enviarle el enlace oficial y recabar las firmas digitales de los participantes en su celular o tablet.
+                  <p className="text-[11px] text-indigo-800 mt-0.5">
+                    El supervisor recaba directamente en campo las firmas de los participantes y el Administrador recibirá las notificaciones en tiempo real.
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">Nombre del Coordinador</label>
+                  <label className="text-xs font-semibold text-slate-700">Nombre del Supervisor / Responsable</label>
                   <input
                     type="text"
                     value={coordinadorNombre}
                     onChange={(e) => setCoordinadorNombre(e.target.value)}
                     placeholder="Ej. Ing. Carlos Mendoza"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   />
                 </div>
 
@@ -1399,19 +1346,8 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
                     type="text"
                     value={coordinadorPuesto}
                     onChange={(e) => setCoordinadorPuesto(e.target.value)}
-                    placeholder="Ej. Coordinador de Capacitación"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">WhatsApp (10 dígitos)</label>
-                  <input
-                    type="tel"
-                    value={coordinadorWhatsApp}
-                    onChange={(e) => setCoordinadorWhatsApp(e.target.value)}
-                    placeholder="Ej. 8711234567"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    placeholder="Ej. Supervisor de Capacitación"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   />
                 </div>
               </div>
@@ -1544,55 +1480,36 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
                 )}
               </div>
 
-              {/* Coordinador Asignado y Enlace WhatsApp */}
-              <div className="bg-gradient-to-br from-emerald-50/70 to-teal-50/50 rounded-2xl p-4 border border-emerald-200 space-y-2">
+              {/* Supervisor / Recolección de Firmas */}
+              <div className="bg-gradient-to-br from-indigo-50/80 to-blue-50/50 rounded-2xl p-4 border border-indigo-200 space-y-2">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
                       <Smartphone className="w-3.5 h-3.5" />
                     </div>
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider block">
-                        Coordinador de Campo / Recolección de Firmas
+                      <span className="text-[10px] uppercase font-bold text-indigo-800 tracking-wider block">
+                        Supervisor / Recolección de Firmas en Campo
                       </span>
-                      <p className="font-bold text-emerald-950 text-xs">
-                        {selectedEvento.coordinadorNombre || 'Sin coordinador asignado'}
+                      <p className="font-bold text-indigo-950 text-xs">
+                        {selectedEvento.coordinadorNombre || 'Supervisor de Capacitación'}
                         {selectedEvento.coordinadorPuesto && ` • ${selectedEvento.coordinadorPuesto}`}
                       </p>
                     </div>
                   </div>
-                  {selectedEvento.coordinadorWhatsApp && (
-                    <span className="px-2.5 py-1 rounded-lg bg-white border border-emerald-200 text-emerald-800 text-xs font-mono font-bold">
-                      WA: {selectedEvento.coordinadorWhatsApp}
-                    </span>
-                  )}
                 </div>
 
                 <div className="flex items-center gap-2 pt-1 flex-wrap">
-                  <button
-                    onClick={() => handleShareLinkWhatsApp(selectedEvento)}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Share2 className="w-3.5 h-3.5" />
-                    <span>Enviar WhatsApp</span>
-                  </button>
-                  <button
-                    onClick={() => handleCopySignatureLink(selectedEvento)}
-                    className="px-3 py-1.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Copiar Enlace</span>
-                  </button>
                   <button
                     onClick={() => {
                       const evt = selectedEvento;
                       setSelectedEvento(null);
                       setViewingFirmaEvento(evt);
                     }}
-                    className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-2 transition-colors cursor-pointer shadow-xs"
                   >
                     <Smartphone className="w-3.5 h-3.5" />
-                    <span>Recabar Firmas Táctil</span>
+                    <span>Recabar Firmas de Participantes (Táctil)</span>
                   </button>
                 </div>
               </div>
@@ -1634,14 +1551,6 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ================= TOAST: ENLACE COPIADO ================= */}
-      {copiedLinkNotice && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 text-xs font-bold flex items-center gap-2 animate-bounce">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{copiedLinkNotice}</span>
         </div>
       )}
 

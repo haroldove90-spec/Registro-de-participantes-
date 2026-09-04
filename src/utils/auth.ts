@@ -386,16 +386,16 @@ export const UPDATED_DATABASE_SQL = `-- ========================================
 -- 1. HABILITAR EXTENSIÓN UUID
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. TABLA DE USUARIOS Y COORDINADORES DEL SISTEMA (ROLES Y CREDENCIALES)
+-- 2. TABLA DE USUARIOS Y SUPERVISORES DEL SISTEMA (ROLES, PUESTOS Y CREDENCIALES)
 CREATE TABLE IF NOT EXISTS public.usuarios_sistema (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     nombre TEXT NOT NULL,
     usuario TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE NOT NULL,
     clave TEXT NOT NULL,
-    rol TEXT NOT NULL DEFAULT 'Coordinadores',
+    rol TEXT NOT NULL DEFAULT 'Supervisor',
     telefono TEXT DEFAULT '',
-    puesto TEXT DEFAULT 'Coordinador de Capacitación',
+    puesto TEXT DEFAULT 'Supervisor',
     departamento TEXT DEFAULT 'Recursos Humanos / Capacitación',
     rfc TEXT DEFAULT 'XAXX010101000',
     avatar_url TEXT DEFAULT '',
@@ -403,6 +403,12 @@ CREATE TABLE IF NOT EXISTS public.usuarios_sistema (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
+
+-- Asegurar columnas de puesto y rol en tablas preexistentes
+ALTER TABLE public.usuarios_sistema ADD COLUMN IF NOT EXISTS puesto TEXT DEFAULT 'Supervisor';
+ALTER TABLE public.usuarios_sistema ADD COLUMN IF NOT EXISTS rol TEXT DEFAULT 'Supervisor';
+ALTER TABLE public.perfiles_usuario ADD COLUMN IF NOT EXISTS puesto TEXT DEFAULT 'Supervisor';
+ALTER TABLE public.perfiles_usuario ADD COLUMN IF NOT EXISTS rol TEXT DEFAULT 'Supervisor';
 
 -- 3. TABLA DE EVENTOS DE CAPACITACIÓN Y REUNIONES DE TRABAJO
 CREATE TABLE IF NOT EXISTS public.eventos (

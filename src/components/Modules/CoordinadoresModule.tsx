@@ -26,6 +26,7 @@ import {
   HelpCircle,
   X,
   RefreshCw,
+  Plus,
 } from 'lucide-react';
 import { UserCredential, UserRole } from '../../types';
 import {
@@ -49,6 +50,14 @@ interface CoordinadoresModuleProps {
   onNotify?: (message: string) => void;
 }
 
+const STORAGE_KEY_PUESTOS = 'registro_participantes_puestos_v1';
+const DEFAULT_PUESTOS = [
+  'Supervisor',
+  'Coordinador',
+  'Supervisor de Capacitación',
+  'Coordinador de Capacitación',
+];
+
 export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
   const [credentialsList, setCredentialsList] = useState<UserCredential[]>(() =>
     getStoredCredentials()
@@ -66,9 +75,42 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
   const [telefono, setTelefono] = useState('');
   const [rol, setRol] = useState<UserRole>('Supervisor');
   const [clave, setClave] = useState(() => generateSecurePassword('Superv'));
-  const [puesto, setPuesto] = useState('Supervisor de Capacitación');
+  const [puesto, setPuesto] = useState('Supervisor');
   const [departamento, setDepartamento] = useState('Recursos Humanos / Capacitación');
   const [showClave, setShowClave] = useState(false);
+
+  // Dynamic Puestos management (Supervisor, Coordinador, + manual custom)
+  const [puestosDisponibles, setPuestosDisponibles] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_PUESTOS);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return Array.from(new Set([...DEFAULT_PUESTOS, ...parsed]));
+        }
+      }
+    } catch (e) {
+      console.error('Error loading custom puestos:', e);
+    }
+    return DEFAULT_PUESTOS;
+  });
+  const [isAddingNewPuesto, setIsAddingNewPuesto] = useState(false);
+  const [nuevoPuestoInput, setNuevoPuestoInput] = useState('');
+
+  const handleAddNewPuesto = (customPuesto?: string) => {
+    const p = (customPuesto || nuevoPuestoInput).trim();
+    if (!p) return;
+    if (!puestosDisponibles.includes(p)) {
+      const updated = [...puestosDisponibles, p];
+      setPuestosDisponibles(updated);
+      try {
+        localStorage.setItem(STORAGE_KEY_PUESTOS, JSON.stringify(updated));
+      } catch (e) {}
+    }
+    setPuesto(p);
+    setNuevoPuestoInput('');
+    setIsAddingNewPuesto(false);
+  };
 
   // Feedback states
   const [formSuccess, setFormSuccess] = useState('');
@@ -161,10 +203,12 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
     setUsuario('');
     setEmail('');
     setTelefono('');
-    setRol('Coordinadores');
-    setClave(generateSecurePassword('Coord'));
-    setPuesto('Coordinador de Capacitación');
+    setRol('Supervisor');
+    setClave(generateSecurePassword('Superv'));
+    setPuesto('Supervisor');
     setDepartamento('Recursos Humanos / Capacitación');
+    setIsAddingNewPuesto(false);
+    setNuevoPuestoInput('');
     setFormError('');
     setFormSuccess('');
   };
@@ -177,8 +221,10 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
     setTelefono(coord.telefono);
     setRol(coord.rol as UserRole);
     setClave(coord.clave);
-    setPuesto(coord.puesto || 'Coordinador de Capacitación');
+    setPuesto(coord.puesto || 'Supervisor');
     setDepartamento(coord.departamento || 'Recursos Humanos / Capacitación');
+    setIsAddingNewPuesto(false);
+    setNuevoPuestoInput('');
     setFormError('');
     setFormSuccess('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -194,7 +240,7 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
       return;
     }
 
-    const cleanUser = usuario.trim().toLowerCase().replace(/\s+/g, '_');
+    const cleanUser = usuario.trim().toLowerCase().replace(/\s+/g, '');
     if (!cleanUser) {
       setFormError('El nombre de usuario es obligatorio.');
       return;
@@ -223,6 +269,15 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
       return;
     }
 
+    const finalPuesto = (puesto || 'Supervisor').trim();
+    if (!puestosDisponibles.includes(finalPuesto)) {
+      const updated = [...puestosDisponibles, finalPuesto];
+      setPuestosDisponibles(updated);
+      try {
+        localStorage.setItem(STORAGE_KEY_PUESTOS, JSON.stringify(updated));
+      } catch (e) {}
+    }
+
     // Save with normalized Mexican phone
     const saved = saveOrUpdateCoordinator({
       id: editingId || undefined,
@@ -232,7 +287,7 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
       clave: clave.trim(),
       rol,
       telefono: phoneFormatting.display || telefono.trim(),
-      puesto: puesto.trim(),
+      puesto: finalPuesto,
       departamento: departamento.trim(),
       rfc: 'XAXX010101000',
       avatarUrl:
@@ -245,8 +300,8 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
     setCredentialsList(getStoredCredentials());
     setFormSuccess(
       editingId
-        ? `Coordinador "${saved.nombre}" actualizado y sincronizado en Supabase (tabla "usuarios_sistema").`
-        : `¡Coordinador "${saved.nombre}" registrado con éxito y guardado en Supabase (tabla "usuarios_sistema")! Ya puede iniciar sesión.`
+        ? `Usuario "${saved.nombre}" (${finalPuesto}) actualizado y sincronizado en Supabase.`
+        : `¡Usuario "${saved.nombre}" con puesto "${finalPuesto}" registrado con éxito y guardado en Supabase! Ya puede iniciar sesión.`
     );
 
     if (!editingId) {
@@ -547,11 +602,12 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
                 onChange={(e) => setRol(e.target.value as UserRole)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 text-sm font-semibold bg-slate-50 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
               >
-                <option value="Supervisor">Supervisor (Registro de Eventos y Participantes)</option>
+                <option value="Supervisor">Supervisor (Registro de Eventos y Recolección de Firmas)</option>
+                <option value="Coordinadores">Coordinador (Operación y Capacitación)</option>
                 <option value="Admin">Admin (Control Total, Exportación Oficial e Impresión)</option>
               </select>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Al entrar al sistema, el usuario accederá con su respectivo rol y los eventos se mantendrán perfectamente sincronizados.
+                Al entrar al sistema, el usuario accederá con su respectivo rol y los eventos se mantendrán sincronizados.
               </p>
             </div>
 
@@ -592,33 +648,179 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
               </div>
             </div>
 
-            {/* Puesto y Depto */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Puesto / Cargo
+            {/* Puesto / Cargo con Asignación de Supervisor, Coordinador y opción (+) manual */}
+            <div className="space-y-2.5 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Puesto / Cargo Asignado *
                 </label>
-                <input
-                  type="text"
-                  placeholder="Coordinador de Capacitación"
-                  value={puesto}
-                  onChange={(e) => setPuesto(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-slate-900 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                />
+                <button
+                  type="button"
+                  onClick={() => setIsAddingNewPuesto(!isAddingNewPuesto)}
+                  className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer transition-colors"
+                  title="Agregar nuevo puesto manualmente"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{isAddingNewPuesto ? 'Cerrar (+)' : '+ Agregar nuevo puesto'}</span>
+                </button>
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Departamento
-                </label>
-                <input
-                  type="text"
-                  placeholder="Recursos Humanos"
-                  value={departamento}
-                  onChange={(e) => setDepartamento(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-slate-900 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                />
+              {/* Botones de Selección Rápida (Supervisor, Coordinador, +) */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPuesto('Supervisor');
+                    setIsAddingNewPuesto(false);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                    puesto === 'Supervisor'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                      : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'
+                  }`}
+                >
+                  Supervisor
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPuesto('Coordinador');
+                    setIsAddingNewPuesto(false);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                    puesto === 'Coordinador'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'
+                  }`}
+                >
+                  Coordinador
+                </button>
+
+                {/* Otros puestos adicionales disponibles */}
+                {puestosDisponibles
+                  .filter((p) => p !== 'Supervisor' && p !== 'Coordinador')
+                  .slice(0, 3)
+                  .map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => {
+                        setPuesto(p);
+                        setIsAddingNewPuesto(false);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border ${
+                        puesto === p
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+
+                <button
+                  type="button"
+                  onClick={() => setIsAddingNewPuesto(true)}
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center gap-1 ${
+                    isAddingNewPuesto
+                      ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                      : 'bg-blue-100 hover:bg-blue-200 text-blue-800 border-blue-300'
+                  }`}
+                  title="Agregar nuevo puesto manualmente por el Admin"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+</span>
+                </button>
               </div>
+
+              {/* Formulario para agregar manualmente un nuevo puesto por el admin */}
+              {isAddingNewPuesto && (
+                <div className="p-3 bg-blue-100/60 border border-blue-300 rounded-xl space-y-2 animate-fade-in">
+                  <div className="text-[11px] font-bold text-blue-900 flex items-center gap-1">
+                    <Plus className="w-3.5 h-3.5 text-blue-700" />
+                    <span>Agregar manualmente un nuevo puesto por el Admin:</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={nuevoPuestoInput}
+                      onChange={(e) => setNuevoPuestoInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddNewPuesto();
+                        }
+                      }}
+                      placeholder="Ej. Coordinador de Seguridad, Supervisor de Campo..."
+                      className="flex-1 px-3 py-2 rounded-xl border border-blue-300 bg-white text-xs font-medium text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddNewPuesto()}
+                      className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer shrink-0"
+                    >
+                      Guardar Puesto
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Selector desplegable y edición directa */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-slate-600">
+                    Seleccionar puesto de la lista
+                  </label>
+                  <select
+                    value={puesto}
+                    onChange={(e) => {
+                      if (e.target.value === '__NEW__') {
+                        setIsAddingNewPuesto(true);
+                      } else {
+                        setPuesto(e.target.value);
+                        setIsAddingNewPuesto(false);
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 text-xs font-semibold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  >
+                    {puestosDisponibles.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                    <option value="__NEW__">+ Agregar otro puesto manualmente...</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-slate-600">
+                    O editar texto exacto del puesto
+                  </label>
+                  <input
+                    type="text"
+                    value={puesto}
+                    onChange={(e) => setPuesto(e.target.value)}
+                    placeholder="Escribe o ajusta el puesto"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Departamento */}
+            <div className="space-y-1">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Departamento
+              </label>
+              <input
+                type="text"
+                placeholder="Recursos Humanos / Capacitación"
+                value={departamento}
+                onChange={(e) => setDepartamento(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-slate-900 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
             </div>
 
             {/* Submit Button */}
@@ -629,12 +831,12 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
               {editingId ? (
                 <>
                   <Check className="w-4 h-4" />
-                  <span>Guardar Cambios de Coordinador</span>
+                  <span>Guardar Cambios de Usuario</span>
                 </>
               ) : (
                 <>
                   <UserPlus className="w-4 h-4" />
-                  <span>Registrar Coordinador y Activar Rol</span>
+                  <span>Registrar Usuario y Activar Puesto</span>
                 </>
               )}
             </button>

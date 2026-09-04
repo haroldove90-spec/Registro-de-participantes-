@@ -192,21 +192,44 @@ export function notifySupervisorRegisteredParticipants(
 }
 
 /**
- * Notification: Coordinator has finished gathering 100% of signatures -> Notify Admin & Supervisor
+ * Notification: Supervisor collected a participant's signature -> Notify Admin
  */
-export function notifyEventSignaturesCompleted(
+export function notifySupervisorGatheredSignature(
   evento: EventoData,
+  participanteNombre: string,
+  supervisorName?: string,
   firmadosCount?: number,
   totalCount?: number
 ): SystemNotification {
   const total = totalCount ?? (evento.participantes?.length || 0);
+  const firmados = firmadosCount ?? (evento.participantes?.filter((p) => !!p.firma).length || 0);
   return pushSystemNotification({
-    titulo: '¡Evento Firmado al 100% por los Participantes!',
-    mensaje: `El Coordinador de Campo ha recabado exitosamente la totalidad de las ${total} firmas digitales para el evento "${evento.nombreEvento}".`,
+    titulo: '¡Firma Recabada por el Supervisor!',
+    mensaje: `El Supervisor ${supervisorName || 'de Capacitación'} ha recabado la firma digital de "${participanteNombre}" en el evento "${evento.nombreEvento}" (${firmados}/${total} firmas listas).`,
     tipo: 'firmas_completadas',
     eventoId: evento.id,
     eventoNombre: evento.nombreEvento,
-    destinatarioRol: 'Todos',
+    destinatarioRol: 'Admin',
+  });
+}
+
+/**
+ * Notification: Supervisor has finished gathering 100% of signatures -> Notify Admin
+ */
+export function notifyEventSignaturesCompleted(
+  evento: EventoData,
+  firmadosCount?: number,
+  totalCount?: number,
+  supervisorName?: string
+): SystemNotification {
+  const total = totalCount ?? (evento.participantes?.length || 0);
+  return pushSystemNotification({
+    titulo: '¡Evento Firmado al 100% por los Participantes!',
+    mensaje: `El Supervisor ${supervisorName || 'de Capacitación'} ha recabado exitosamente el 100% de las ${total} firmas digitales de los participantes en el evento "${evento.nombreEvento}".`,
+    tipo: 'firmas_completadas',
+    eventoId: evento.id,
+    eventoNombre: evento.nombreEvento,
+    destinatarioRol: 'Admin',
   });
 }
 

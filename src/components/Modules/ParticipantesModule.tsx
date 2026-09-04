@@ -34,7 +34,11 @@ import {
 import { SignatureCanvas } from '../SignatureCanvas';
 import { exportEventoToExcel, exportEventoToPdf } from '../../utils/exporter';
 import { HojaAsistenciaOficialModal } from '../HojaAsistenciaOficialModal';
-import { notifySupervisorRegisteredParticipants, notifySignaturesCompleted } from '../../utils/notifications';
+import {
+  notifySupervisorRegisteredParticipants,
+  notifySupervisorGatheredSignature,
+  notifySignaturesCompleted,
+} from '../../utils/notifications';
 import { FirmaCoordinadorView } from './FirmaCoordinadorView';
 
 interface ParticipantesModuleProps {
@@ -64,41 +68,8 @@ export const ParticipantesModule: React.FC<ParticipantesModuleProps> = ({
     userProfile?.email?.toLowerCase() === 'haroldo90@hotmail.com' ||
     userProfile?.usuario === 'haroldo90';
 
-  // Modal for field coordinator signature collection
+  // Modal for supervisor touch signature collection
   const [viewingFirmaEvento, setViewingFirmaEvento] = useState<EventoData | null>(null);
-  const [copiedLinkNotice, setCopiedLinkNotice] = useState<string | null>(null);
-
-  // Helper to generate personalized event signature link
-  const getEventSignatureLink = (eventoId: string) => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    return `${origin}/?modulo=firmas&eventoId=${encodeURIComponent(eventoId)}`;
-  };
-
-  const handleShareLinkWhatsApp = (evt: EventoData) => {
-    const link = getEventSignatureLink(evt.id);
-    const cleanPhone = (evt.coordinadorWhatsApp || '').replace(/\D/g, '');
-    const message = `📋 *SISTEMA DE CAPACITACIÓN - CONTROL DE ASISTENCIA Y FIRMAS*\n\n` +
-      `Estimado/a *${evt.coordinadorNombre || 'Coordinador(a)'}*,\n` +
-      `Se te ha asignado el evento *${evt.nombreEvento}* (Clave: ${evt.id}).\n\n` +
-      `📅 Fecha: ${evt.fechaInicio} al ${evt.fechaTermino}\n` +
-      `👥 Participantes programados: ${evt.participantes?.length || 0}\n\n` +
-      `Por favor abre el siguiente enlace oficial desde tu celular o tablet para recabar las firmas digitales de los participantes:\n` +
-      `🔗 ${link}\n\n` +
-      `Las firmas se reflejan en tiempo real para el Administrador y el Supervisor.`;
-
-    const waUrl = cleanPhone
-      ? `https://wa.me/${cleanPhone.startsWith('52') ? cleanPhone : '52' + cleanPhone}?text=${encodeURIComponent(message)}`
-      : `https://wa.me/?text=${encodeURIComponent(message)}`;
-
-    window.open(waUrl, '_blank');
-  };
-
-  const handleCopySignatureLink = (evt: EventoData) => {
-    const link = getEventSignatureLink(evt.id);
-    navigator.clipboard.writeText(link);
-    setCopiedLinkNotice(`¡Enlace de firmas para el evento ${evt.id} copiado al portapapeles!`);
-    setTimeout(() => setCopiedLinkNotice(null), 4000);
-  };
 
   // Default to first active event or first event in list
   const [activeEventoId, setActiveEventoId] = useState<string>(() => {
@@ -189,6 +160,16 @@ export const ParticipantesModule: React.FC<ParticipantesModuleProps> = ({
       if (onUpdateParticipant) {
         onUpdateParticipant(currentEvento.id, updatedParticipant);
       }
+
+      // If updated by supervisor with a digital signature, alert Admin
+      if (!isAdmin && updatedParticipant.firma) {
+        notifySupervisorGatheredSignature(
+          currentEvento,
+          updatedParticipant.nombre,
+          userProfile?.nombre || 'Supervisor'
+        );
+      }
+
       setToastMessage({
         type: 'success',
         text: `Datos de ${updatedParticipant.nombre} actualizados con éxito.`,
@@ -215,11 +196,21 @@ export const ParticipantesModule: React.FC<ParticipantesModuleProps> = ({
 
       // If registered by supervisor, alert admin
       if (!isAdmin) {
-        notifySupervisorRegisteredParticipants(
-          currentEvento,
-          userProfile?.nombre || 'Supervisor',
-          (currentEvento.participantes?.length || 0) + 1
-        );
+        if (newParticipant.firma) {
+          notifySupervisorGatheredSignature(
+            currentEvento,
+            newParticipant.nombre,
+            userProfile?.nombre || 'Supervisor',
+            (currentEvento.participantes?.filter((p) => !!p.firma).length || 0) + 1,
+            (currentEvento.participantes?.length || 0) + 1
+          );
+        } else {
+          notifySupervisorRegisteredParticipants(
+            currentEvento,
+            userProfile?.nombre || 'Supervisor',
+            (currentEvento.participantes?.length || 0) + 1
+          );
+        }
       }
 
       setToastMessage({
@@ -469,60 +460,34 @@ export const ParticipantesModule: React.FC<ParticipantesModuleProps> = ({
               );
             })()}
 
-            {/* Tarjeta del Coordinador Asignado y Enlace WhatsApp */}
-            <div className="bg-gradient-to-r from-emerald-900 to-teal-900 rounded-2xl p-4 md:p-5 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-md">
+            {/* Panel de Recolección de Firmas del Supervisor */}
+            <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-4 md:p-5 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-md">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 text-[10px] font-bold uppercase tracking-wider border border-emerald-400/30">
-                    Coordinador de Campo / Recolección de Firmas
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-400/20 text-blue-300 text-[10px] font-bold uppercase tracking-wider border border-blue-400/30">
+                    Recolección de Firmas en Campo
                   </span>
-                  {currentEvento.coordinadorWhatsApp && (
-                    <span className="text-xs text-emerald-200 font-mono">
-                      WA: {currentEvento.coordinadorWhatsApp}
-                    </span>
-                  )}
+                  <span className="text-xs text-blue-200 font-semibold">
+                    {currentEvento.participantes?.filter((p) => !!p.firma).length || 0} de {currentEvento.participantes?.length || 0} participantes firmados
+                  </span>
                 </div>
                 <p className="text-sm font-bold text-white">
-                  {currentEvento.coordinadorNombre ? (
-                    <span>
-                      {currentEvento.coordinadorNombre}{' '}
-                      {currentEvento.coordinadorPuesto ? `(${currentEvento.coordinadorPuesto})` : ''}
-                    </span>
-                  ) : (
-                    <span className="text-emerald-300/80 italic">
-                      Sin coordinador asignado aún (puedes asignarlo al editar el evento)
-                    </span>
-                  )}
+                  El supervisor recaba directamente las firmas de los participantes en su dispositivo
                 </p>
-                <p className="text-xs text-emerald-200/90">
-                  Envía el enlace oficial al coordinador para que recabe las firmas en su celular o tablet en campo.
+                <p className="text-xs text-blue-200/90">
+                  Cada firma recabada notificará automáticamente al Administrador para mantenerlo informado en tiempo real.
                 </p>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
                 <button
-                  onClick={() => handleShareLinkWhatsApp(currentEvento)}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-                  title="Abrir WhatsApp con mensaje prediseñado y enlace oficial"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                  <span>Enviar WhatsApp</span>
-                </button>
-                <button
-                  onClick={() => handleCopySignatureLink(currentEvento)}
-                  className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                  title="Copiar enlace para el coordinador"
-                >
-                  <Copy className="w-3.5 h-3.5 text-emerald-300" />
-                  <span>Copiar Link</span>
-                </button>
-                <button
+                  type="button"
                   onClick={() => setViewingFirmaEvento(currentEvento)}
-                  className="px-3.5 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-                  title="Abrir pantalla táctil de recolección de firmas"
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center gap-2 transition-all shadow-md cursor-pointer"
+                  title="Abrir pantalla táctil de recolección de firmas para participantes"
                 >
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span>Recabar Firmas Táctil</span>
+                  <Smartphone className="w-4 h-4" />
+                  <span>Recabar Firmas de Participantes (Táctil)</span>
                 </button>
               </div>
             </div>
@@ -881,14 +846,6 @@ export const ParticipantesModule: React.FC<ParticipantesModuleProps> = ({
           }}
           onClose={() => setViewingFirmaEvento(null)}
         />
-      )}
-
-      {/* ================= TOAST: ENLACE COPIADO ================= */}
-      {copiedLinkNotice && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 text-xs font-bold flex items-center gap-2 animate-bounce">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{copiedLinkNotice}</span>
-        </div>
       )}
     </div>
   );

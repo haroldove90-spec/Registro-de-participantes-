@@ -22,6 +22,7 @@ import { SignatureCanvas } from '../SignatureCanvas';
 import { upsertEventoToSupabase } from '../../lib/supabase';
 import {
   playNotificationSound,
+  notifySupervisorGatheredSignature,
   notifyEventSignaturesCompleted,
 } from '../../utils/notifications';
 
@@ -107,10 +108,25 @@ export const FirmaCoordinadorView: React.FC<FirmaCoordinadorViewProps> = ({
       setToastMessage(`¡Firma guardada correctamente para ${selectedParticipant.nombre}!`);
       setTimeout(() => setToastMessage(''), 4000);
 
-      // 4. Check if 100% completed
+      // 4. Notify Admin in real-time that supervisor collected this signature
+      const firmadosActuales = updatedParticipants.filter((p) => !!p.firma).length;
+      notifySupervisorGatheredSignature(
+        updatedEvento,
+        selectedParticipant.nombre,
+        userProfile?.nombre || 'Supervisor',
+        firmadosActuales,
+        updatedParticipants.length
+      );
+
+      // 5. Check if 100% completed
       const allSignedNow = updatedParticipants.every((p) => !!p.firma);
       if (allSignedNow && !todoFirmado) {
-        notifyEventSignaturesCompleted(updatedEvento);
+        notifyEventSignaturesCompleted(
+          updatedEvento,
+          updatedParticipants.length,
+          updatedParticipants.length,
+          userProfile?.nombre || 'Supervisor'
+        );
       }
 
       handleCloseFirmaModal();
@@ -199,16 +215,14 @@ export const FirmaCoordinadorView: React.FC<FirmaCoordinadorViewProps> = ({
 
             <div className="space-y-1 bg-slate-900/60 p-3 rounded-2xl border border-slate-700/50">
               <span className="text-slate-400 font-semibold flex items-center gap-1">
-                <Smartphone className="w-3.5 h-3.5 text-amber-400" /> Coordinador Responsable
+                <Smartphone className="w-3.5 h-3.5 text-amber-400" /> Supervisor Responsable
               </span>
               <p className="text-white font-bold text-sm truncate">
-                {evento.coordinadorNombre || 'Coordinador en Campo'}
+                {userProfile?.nombre || evento.coordinadorNombre || 'Supervisor en Campo'}
               </p>
-              {evento.coordinadorWhatsApp && (
-                <p className="text-[11px] text-emerald-400 font-mono font-medium">
-                  WA: {evento.coordinadorWhatsApp}
-                </p>
-              )}
+              <p className="text-[11px] text-blue-400 font-semibold">
+                Recolección directa de firmas
+              </p>
             </div>
           </div>
 
