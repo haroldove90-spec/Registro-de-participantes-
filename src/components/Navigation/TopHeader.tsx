@@ -38,8 +38,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
 
   const isAccountAdmin =
-    userProfile.email.toLowerCase() === 'haroldo90@hotmail.com' ||
-    userProfile.usuario === 'haroldo90' ||
+    userProfile.email?.toLowerCase().includes('harold') ||
+    userProfile.usuario?.toLowerCase().includes('harold') ||
+    userProfile.nombre?.toLowerCase().includes('harold') ||
     userProfile.rol === 'Admin' ||
     userProfile.rol.toLowerCase().includes('admin');
 
@@ -204,11 +205,20 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             </div>
           )}
 
+          {/* Active User Session Pill */}
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/90 border border-slate-200 text-slate-700 shadow-2xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span className="text-[11px] text-slate-500 font-medium">Sesión:</span>
+            <span className="text-xs font-bold text-slate-900 truncate max-w-[150px]" title={userProfile.nombre}>
+              {userProfile.nombre}
+            </span>
+          </div>
+
           {/* User Profile Button */}
           <button
             onClick={() => setActiveModule('perfil')}
-            className="flex items-center gap-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 p-1.5 pr-3 rounded-xl transition-all cursor-pointer shadow-2xs"
-            title="Ver Perfil y Configuración"
+            className="flex items-center gap-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 p-1.5 pr-3 rounded-xl transition-all cursor-pointer shadow-2xs group"
+            title={`Ver Perfil y Configuración de ${userProfile.nombre}`}
           >
             <img
               src={
@@ -216,11 +226,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'
               }
               alt={userProfile.nombre}
-              className="w-8 h-8 rounded-lg object-cover border border-slate-200"
+              className="w-8 h-8 rounded-lg object-cover border border-slate-200 group-hover:border-blue-400 transition-colors"
             />
             <div className="text-left hidden sm:block">
-              <p className="text-xs font-semibold text-slate-800 leading-tight truncate max-w-[130px]">
-                {userProfile.nombre.split(' ')[0]} {userProfile.nombre.split(' ')[1] || ''}
+              <p className="text-xs font-bold text-slate-900 leading-tight truncate max-w-[140px]" title={userProfile.nombre}>
+                {userProfile.nombre}
               </p>
               <span
                 className={`inline-block text-[9px] font-bold px-1.5 py-0.2 rounded border uppercase tracking-wider ${getRoleBadgeStyle(

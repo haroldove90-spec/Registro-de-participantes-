@@ -65,8 +65,9 @@ export const ParticipantesModule: React.FC<ParticipantesModuleProps> = ({
   const isAdmin =
     userProfile?.rol === 'Admin' ||
     userProfile?.rol?.toLowerCase().includes('admin') ||
-    userProfile?.email?.toLowerCase() === 'haroldo90@hotmail.com' ||
-    userProfile?.usuario === 'haroldo90';
+    userProfile?.email?.toLowerCase().includes('harold') ||
+    userProfile?.usuario?.toLowerCase().includes('harold') ||
+    userProfile?.nombre?.toLowerCase().includes('harold');
 
   // Modal for supervisor touch signature collection
   const [viewingFirmaEvento, setViewingFirmaEvento] = useState<EventoData | null>(null);

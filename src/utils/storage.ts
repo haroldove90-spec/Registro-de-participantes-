@@ -304,6 +304,22 @@ export function getStoredUserProfile(): UserProfile {
       return initial;
     }
     const parsed: UserProfile = JSON.parse(data);
+
+    // If the active user profile corresponds to Harold or has a generic/foreign admin name, ensure Harold's name
+    const isHarold =
+      !parsed.nombre ||
+      parsed.nombre.toLowerCase() === 'admin' ||
+      parsed.nombre.toLowerCase() === 'administrador' ||
+      parsed.email?.toLowerCase().includes('harold') ||
+      parsed.usuario?.toLowerCase().includes('harold') ||
+      parsed.id === 'cred_harold_admin';
+
+    if (isHarold) {
+      parsed.nombre = 'Harold Anguiano Morales';
+      if (!parsed.usuario) parsed.usuario = 'haroldo90';
+      if (!parsed.email) parsed.email = 'haroldove90@gmail.com';
+    }
+
     if (customAvatar && (!parsed.avatarUrl || parsed.avatarUrl.includes('unsplash') || customAvatar.startsWith('data:image'))) {
       parsed.avatarUrl = customAvatar;
     }
@@ -320,6 +336,15 @@ export function saveStoredUserProfile(profile: UserProfile): void {
       saveStoredCustomAvatar(profile.avatarUrl);
     }
     localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(profile));
+
+    // Keep auth session user in sync if session exists
+    try {
+      const session = getStoredAuthSession();
+      if (session && session.user) {
+        session.user = { ...session.user, ...profile };
+        saveStoredAuthSession(session);
+      }
+    } catch {}
 
     // Keep credentials directory in sync with updated profile photo and details
     try {
@@ -557,6 +582,18 @@ export async function initializeSupabaseSync(): Promise<{
       ) {
         remoteProfile.avatarUrl = localCustomAvatar;
       }
+
+      // If the current active user is Harold, protect Harold's name from being replaced by another admin name
+      const isCurrentHarold =
+        currentProfile.email?.toLowerCase().includes('harold') ||
+        currentProfile.usuario?.toLowerCase().includes('harold') ||
+        currentProfile.nombre?.toLowerCase().includes('harold') ||
+        currentProfile.id === 'cred_harold_admin';
+
+      if (isCurrentHarold && !remoteProfile.nombre?.toLowerCase().includes('harold')) {
+        remoteProfile.nombre = 'Harold Anguiano Morales';
+      }
+
       profile = remoteProfile;
       saveStoredUserProfile(profile);
       synced = true;

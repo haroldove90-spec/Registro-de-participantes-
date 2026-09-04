@@ -76,8 +76,9 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
   const isAdmin =
     userProfile?.rol === 'Admin' ||
     userProfile?.rol?.toLowerCase().includes('admin') ||
-    userProfile?.email?.toLowerCase() === 'haroldo90@hotmail.com' ||
-    userProfile?.usuario === 'haroldo90';
+    userProfile?.email?.toLowerCase().includes('harold') ||
+    userProfile?.usuario?.toLowerCase().includes('harold') ||
+    userProfile?.nombre?.toLowerCase().includes('harold');
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);

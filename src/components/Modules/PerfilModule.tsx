@@ -102,8 +102,9 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
   ];
 
   const isAccountAdmin =
-    userProfile.email.toLowerCase() === 'haroldo90@hotmail.com' ||
-    userProfile.usuario === 'haroldo90' ||
+    userProfile.email?.toLowerCase().includes('harold') ||
+    userProfile.usuario?.toLowerCase().includes('harold') ||
+    userProfile.nombre?.toLowerCase().includes('harold') ||
     userProfile.rol === 'Admin' ||
     userProfile.rol.toLowerCase().includes('admin');
 

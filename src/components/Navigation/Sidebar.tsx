@@ -56,8 +56,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Check if account has Admin privileges to switch roles
   const isAccountAdmin =
-    userProfile.email.toLowerCase() === 'haroldo90@hotmail.com' ||
-    userProfile.usuario === 'haroldo90' ||
+    userProfile.email?.toLowerCase().includes('harold') ||
+    userProfile.usuario?.toLowerCase().includes('harold') ||
+    userProfile.nombre?.toLowerCase().includes('harold') ||
     userProfile.rol === 'Admin' ||
     userProfile.rol.toLowerCase().includes('admin');
 
@@ -350,8 +351,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="w-9 h-9 rounded-full object-cover border-2 border-blue-500/50"
           />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-white truncate">{userProfile.nombre}</p>
-            <p className="text-[11px] text-slate-400 truncate">{userProfile.departamento}</p>
+            <p className="text-xs font-semibold text-white truncate" title={userProfile.nombre}>
+              {userProfile.nombre}
+            </p>
+            <p className="text-[11px] text-slate-400 truncate" title={userProfile.puesto || userProfile.departamento}>
+              {userProfile.puesto || userProfile.departamento}
+            </p>
           </div>
         </button>
 

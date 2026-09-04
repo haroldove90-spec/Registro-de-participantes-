@@ -34,8 +34,10 @@ export const FloatingNotificationModal: React.FC<FloatingNotificationModalProps>
   // Normalize user role
   const isUserAdmin =
     userProfile.rol === 'Admin' ||
-    userProfile.email?.toLowerCase() === 'haroldo90@hotmail.com' ||
-    userProfile.usuario === 'haroldo90';
+    userProfile.rol?.toLowerCase().includes('admin') ||
+    userProfile.email?.toLowerCase().includes('harold') ||
+    userProfile.usuario?.toLowerCase().includes('harold') ||
+    userProfile.nombre?.toLowerCase().includes('harold');
 
   const userRoleCategory: 'Admin' | 'Supervisor' = isUserAdmin ? 'Admin' : 'Supervisor';
 

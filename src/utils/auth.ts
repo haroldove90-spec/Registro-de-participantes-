@@ -11,11 +11,11 @@ export const SYSTEM_OFFICIAL_URL = 'https://registro-de-participantes.vercel.app
 /**
  * Default Seeded Credentials requested by the user:
  * 1. Harold Anguiano Morales (Admin)
- *    Usuario: haroldo90
+ *    Usuario: haroldo90 / harold
  *    Clave: Chevropar#1970
- *    Correo: haroldo90@hotmail.com
+ *    Correo: haroldove90@gmail.com / haroldo90@hotmail.com
  *
- * 2. Cesar Netro (Coordinadores)
+ * 2. Cesar Netro (Coordinadores / Supervisor)
  *    Usuario: cesar_netro
  *    Clave segura: Netro#Coord2026!
  *    Correo: cesar_netro@hotmail.com
@@ -25,7 +25,7 @@ export const DEFAULT_CREDENTIALS: UserCredential[] = [
     id: 'cred_harold_admin',
     nombre: 'Harold Anguiano Morales',
     usuario: 'haroldo90',
-    email: 'haroldo90@hotmail.com',
+    email: 'haroldove90@gmail.com',
     clave: 'Chevropar#1970',
     rol: 'Admin',
     telefono: '+52 (55) 8912-3456',
@@ -42,9 +42,9 @@ export const DEFAULT_CREDENTIALS: UserCredential[] = [
     usuario: 'cesar_netro',
     email: 'cesar_netro@hotmail.com',
     clave: 'Netro#Coord2026!',
-    rol: 'Coordinadores',
+    rol: 'Supervisor',
     telefono: '+52 (81) 1234-5678',
-    puesto: 'Coordinador de Capacitación y Eventos',
+    puesto: 'Supervisor de Capacitación y Eventos',
     departamento: 'Coordinación Operativa y Capacitación',
     rfc: 'NECX850515ABC',
     avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
@@ -52,6 +52,22 @@ export const DEFAULT_CREDENTIALS: UserCredential[] = [
     fechaCreacion: '2026-01-15',
   },
 ];
+
+/**
+ * Checks if a given identifier, email or username corresponds to Harold
+ */
+export function isHaroldUser(identifierOrEmail?: string): boolean {
+  if (!identifierOrEmail) return false;
+  const clean = identifierOrEmail.trim().toLowerCase();
+  return (
+    clean === 'haroldo90' ||
+    clean === 'harold' ||
+    clean === 'haroldove90@gmail.com' ||
+    clean === 'haroldo90@hotmail.com' ||
+    clean.includes('harold') ||
+    clean.includes('haroldo90')
+  );
+}
 
 /**
  * Loads stored credentials from localStorage, falling back to default seed
@@ -65,19 +81,29 @@ export function getStoredCredentials(): UserCredential[] {
     }
     const parsed: UserCredential[] = JSON.parse(raw);
 
-    // Ensure Harold and Cesar always exist and are up to date
+    // Ensure Harold always exists, has proper name and emails
     let updated = false;
-    DEFAULT_CREDENTIALS.forEach((def) => {
-      const exists = parsed.some(
-        (c) =>
-          c.usuario.toLowerCase() === def.usuario.toLowerCase() ||
-          c.email.toLowerCase() === def.email.toLowerCase()
-      );
-      if (!exists) {
-        parsed.unshift(def);
-        updated = true;
-      }
-    });
+    const haroldExists = parsed.some((c) => isHaroldUser(c.usuario) || isHaroldUser(c.email));
+    if (!haroldExists) {
+      parsed.unshift(DEFAULT_CREDENTIALS[0]);
+      updated = true;
+    } else {
+      // Ensure Harold's record has his real name Harold Anguiano Morales
+      parsed.forEach((c) => {
+        if (isHaroldUser(c.usuario) || isHaroldUser(c.email) || c.id === 'cred_harold_admin') {
+          if (c.nombre !== 'Harold Anguiano Morales') {
+            c.nombre = 'Harold Anguiano Morales';
+            updated = true;
+          }
+        }
+      });
+    }
+
+    const cesarExists = parsed.some((c) => c.usuario.toLowerCase() === 'cesar_netro');
+    if (!cesarExists) {
+      parsed.push(DEFAULT_CREDENTIALS[1]);
+      updated = true;
+    }
 
     if (updated) {
       localStorage.setItem(STORAGE_KEY_CREDENTIALS, JSON.stringify(parsed));
@@ -215,13 +241,15 @@ export function generateSecurePassword(prefix?: string): string {
 }
 
 /**
- * Normalizes any role to either 'Admin' or 'Coordinadores' (the only 2 roles)
+ * Normalizes any role to 'Admin', 'Supervisor', or 'Coordinadores'
  */
 export function normalizeRole(role?: string): UserRole {
-  if (!role) return 'Coordinadores';
+  if (!role) return 'Supervisor';
   const clean = role.trim().toLowerCase();
   if (clean.includes('admin')) return 'Admin';
-  return 'Coordinadores';
+  if (clean.includes('supervisor')) return 'Supervisor';
+  if (clean.includes('coord')) return 'Coordinadores';
+  return 'Supervisor';
 }
 
 /**
@@ -243,10 +271,14 @@ export function authenticateWithCredentials(
 
   const credentials = getStoredCredentials();
 
+  const isHaroldId = isHaroldUser(cleanId);
+
   const match = credentials.find(
     (c) =>
       c.activo &&
-      (c.usuario.toLowerCase() === cleanId || c.email.toLowerCase() === cleanId) &&
+      (c.usuario.toLowerCase() === cleanId ||
+        c.email.toLowerCase() === cleanId ||
+        (isHaroldId && (isHaroldUser(c.usuario) || isHaroldUser(c.email)))) &&
       c.clave === cleanPass
   );
 
@@ -259,15 +291,16 @@ export function authenticateWithCredentials(
   }
 
   const roleNormalized = normalizeRole(match.rol);
+  const isHarold = isHaroldId || isHaroldUser(match.usuario) || isHaroldUser(match.email);
 
   const userProfile: UserProfile = {
     id: match.id,
-    nombre: match.nombre,
+    nombre: isHarold ? 'Harold Anguiano Morales' : match.nombre,
     usuario: match.usuario,
     email: match.email,
-    puesto: match.puesto || (roleNormalized === 'Coordinadores' ? 'Coordinador de Capacitación' : 'Director de Capacitación'),
+    puesto: match.puesto || (isHarold ? 'Director de Capacitación / Administrador General' : 'Supervisor de Capacitación'),
     departamento: match.departamento || 'Recursos Humanos / Capacitación',
-    rfc: match.rfc || 'XAXX010101000',
+    rfc: match.rfc || 'AUMH900101XYZ',
     telefono: match.telefono,
     rol: roleNormalized,
     avatarUrl:

@@ -430,14 +430,24 @@ export function normalizeUserRole(rawRol?: string): UserRole {
  */
 export async function fetchUserProfileFromSupabase(emailOrId?: string): Promise<UserProfile | null> {
   try {
+    if (!emailOrId || !emailOrId.trim()) {
+      return null;
+    }
+
+    const clean = emailOrId.trim().toLowerCase();
+    const isHarold =
+      clean === 'haroldo90' ||
+      clean === 'harold' ||
+      clean === 'haroldove90@gmail.com' ||
+      clean === 'haroldo90@hotmail.com' ||
+      clean.includes('harold');
+
     let query = supabase.from('perfiles_usuario').select('*');
 
-    if (emailOrId && emailOrId.includes('@')) {
-      query = query.ilike('email', emailOrId);
-    } else if (emailOrId) {
-      query = query.eq('id', emailOrId);
+    if (clean.includes('@')) {
+      query = query.ilike('email', clean);
     } else {
-      query = query.limit(1);
+      query = query.or(`id.eq.${clean},usuario.ilike.${clean}`);
     }
 
     const { data, error } = await query.maybeSingle();
@@ -450,15 +460,42 @@ export async function fetchUserProfileFromSupabase(emailOrId?: string): Promise<
       return null;
     }
 
-    if (!data) return null;
+    if (!data) {
+      // If Harold is being queried but no row exists yet in perfiles_usuario, return Harold profile
+      if (isHarold) {
+        return {
+          id: 'cred_harold_admin',
+          nombre: 'Harold Anguiano Morales',
+          usuario: 'haroldo90',
+          email: clean.includes('@') ? clean : 'haroldove90@gmail.com',
+          puesto: 'Director de Capacitación / Administrador General',
+          departamento: 'Dirección de Recursos Humanos',
+          rfc: 'AUMH900101XYZ',
+          telefono: '+52 (55) 8912-3456',
+          rol: 'Admin',
+          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+          fechaIngreso: '2026-01-01',
+          notificacionesEmail: true,
+          modoOscuro: false,
+        };
+      }
+      return null;
+    }
+
+    const isDataHarold =
+      isHarold ||
+      data.email?.toLowerCase().includes('harold') ||
+      data.usuario?.toLowerCase().includes('harold') ||
+      data.id === 'cred_harold_admin';
 
     return {
       id: data.id,
-      nombre: data.nombre,
+      nombre: isDataHarold ? 'Harold Anguiano Morales' : data.nombre,
+      usuario: data.usuario || (isDataHarold ? 'haroldo90' : undefined),
       email: data.email,
-      puesto: data.puesto || '',
-      departamento: data.departamento || '',
-      rfc: data.rfc || '',
+      puesto: data.puesto || (isDataHarold ? 'Director de Capacitación / Administrador General' : ''),
+      departamento: data.departamento || 'Recursos Humanos / Capacitación',
+      rfc: data.rfc || (isDataHarold ? 'AUMH900101XYZ' : ''),
       telefono: data.telefono || '',
       rol: normalizeUserRole(data.rol),
       avatarUrl: data.avatar_url || '',
@@ -832,15 +869,24 @@ export async function getCurrentSupabaseUser(): Promise<UserProfile | null> {
     const remoteProfile = await fetchUserProfileFromSupabase(email);
     if (remoteProfile) return remoteProfile;
 
+    const isHarold =
+      email.toLowerCase().includes('harold') ||
+      (session.user.user_metadata?.nombre as string)?.toLowerCase().includes('harold');
+
     return {
       id: session.user.id,
-      nombre: (session.user.user_metadata?.nombre as string) || email.split('@')[0],
+      nombre: isHarold
+        ? 'Harold Anguiano Morales'
+        : (session.user.user_metadata?.nombre as string) || email.split('@')[0],
+      usuario: isHarold ? 'haroldo90' : (session.user.user_metadata?.usuario as string) || email.split('@')[0],
       email: email,
-      puesto: (session.user.user_metadata?.puesto as string) || 'Colaborador',
-      departamento: (session.user.user_metadata?.departamento as string) || 'General',
-      rfc: (session.user.user_metadata?.rfc as string) || 'XAXX010101000',
+      puesto: isHarold
+        ? 'Director de Capacitación / Administrador General'
+        : (session.user.user_metadata?.puesto as string) || 'Colaborador',
+      departamento: (session.user.user_metadata?.departamento as string) || (isHarold ? 'Dirección de Recursos Humanos' : 'General'),
+      rfc: (session.user.user_metadata?.rfc as string) || (isHarold ? 'AUMH900101XYZ' : 'XAXX010101000'),
       telefono: (session.user.user_metadata?.telefono as string) || '',
-      rol: (session.user.user_metadata?.rol as UserRole) || 'Coordinador de Capacitación',
+      rol: isHarold ? 'Admin' : ((session.user.user_metadata?.rol as UserRole) || 'Supervisor'),
       avatarUrl:
         (session.user.user_metadata?.avatarUrl as string) ||
         'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',

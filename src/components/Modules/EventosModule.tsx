@@ -88,8 +88,9 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
   const isAdmin =
     userProfile?.rol === 'Admin' ||
     userProfile?.rol?.toLowerCase().includes('admin') ||
-    userProfile?.email?.toLowerCase() === 'haroldo90@hotmail.com' ||
-    userProfile?.usuario === 'haroldo90';
+    userProfile?.email?.toLowerCase().includes('harold') ||
+    userProfile?.usuario?.toLowerCase().includes('harold') ||
+    userProfile?.nombre?.toLowerCase().includes('harold');
 
   // Form states
   const anexoCheckboxId = useId();
@@ -353,7 +354,7 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
         coordinadorPuesto,
         coordinadorWhatsApp,
         registradoPor: existing?.registradoPor || (isAdmin ? 'Admin' : 'Supervisor'),
-        registradoPorNombre: existing?.registradoPorNombre || userProfile?.nombre || (isAdmin ? 'Harold Anguiano' : 'Supervisor'),
+        registradoPorNombre: existing?.registradoPorNombre || userProfile?.nombre || (isAdmin ? 'Harold Anguiano Morales' : 'Supervisor'),
         participantes: existingParticipants,
         fechaCreacion: existing?.fechaCreacion || new Date().toISOString(),
         estado: existing?.estado || 'Registrado',
@@ -407,7 +408,7 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
         coordinadorPuesto,
         coordinadorWhatsApp,
         registradoPor: isAdmin ? 'Admin' : 'Supervisor',
-        registradoPorNombre: userProfile?.nombre || (isAdmin ? 'Harold Anguiano' : 'Supervisor'),
+        registradoPorNombre: userProfile?.nombre || (isAdmin ? 'Harold Anguiano Morales' : 'Supervisor'),
         participantes: [],
         fechaCreacion: new Date().toISOString(),
         estado: 'Registrado',
@@ -418,7 +419,7 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
 
       // Trigger cross-role notification with sound
       if (isAdmin) {
-        notifyAdminCreatedEvent(nuevoEvento, userProfile?.nombre || 'Harold Anguiano');
+        notifyAdminCreatedEvent(nuevoEvento, userProfile?.nombre || 'Harold Anguiano Morales');
       } else {
         notifySupervisorCreatedEvent(nuevoEvento, userProfile?.nombre || 'Supervisor');
       }

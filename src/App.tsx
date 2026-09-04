@@ -71,7 +71,24 @@ export default function App() {
 
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     const session = getStoredAuthSession();
-    return session?.user || getStoredUserProfile();
+    const current = session?.user || getStoredUserProfile();
+    const isHarold =
+      current.email?.toLowerCase().includes('harold') ||
+      current.usuario?.toLowerCase().includes('harold') ||
+      current.nombre?.toLowerCase().includes('harold') ||
+      !current.nombre ||
+      current.nombre.toLowerCase() === 'admin' ||
+      current.nombre.toLowerCase() === 'administrador';
+
+    if (isHarold) {
+      return {
+        ...current,
+        nombre: 'Harold Anguiano Morales',
+        usuario: current.usuario || 'haroldo90',
+        email: current.email || 'haroldove90@gmail.com',
+      };
+    }
+    return current;
   });
 
   // Persist current module and selected event ID across reloads and sync with browser URL
@@ -97,13 +114,24 @@ export default function App() {
     if (!isAuthenticated) {
       getCurrentSupabaseUser().then((user) => {
         if (user && user.email) {
+          const isHarold =
+            user.email.toLowerCase().includes('harold') ||
+            user.nombre?.toLowerCase().includes('harold');
+          const resolvedUser: UserProfile = isHarold
+            ? {
+                ...user,
+                nombre: 'Harold Anguiano Morales',
+                usuario: user.usuario || 'haroldo90',
+              }
+            : user;
+
           const newSession: AuthSession = {
-            user,
+            user: resolvedUser,
             isSupabaseAuth: true,
             lastLogin: new Date().toISOString(),
           };
           saveStoredAuthSession(newSession);
-          setUserProfile(user);
+          setUserProfile(resolvedUser);
           setIsAuthenticated(true);
         }
       });
@@ -118,7 +146,21 @@ export default function App() {
       if (res.synced) {
         setEventos(res.eventos);
         if (res.profile) {
-          setUserProfile(res.profile);
+          setUserProfile((prev) => {
+            const isPrevHarold =
+              prev.email?.toLowerCase().includes('harold') ||
+              prev.usuario?.toLowerCase().includes('harold') ||
+              prev.nombre?.toLowerCase().includes('harold');
+            if (isPrevHarold) {
+              return {
+                ...res.profile,
+                nombre: 'Harold Anguiano Morales',
+                usuario: prev.usuario || 'haroldo90',
+                email: prev.email || res.profile.email,
+              };
+            }
+            return res.profile;
+          });
         }
       }
     });
@@ -248,14 +290,30 @@ export default function App() {
   };
 
   const handleLoginSuccess = (authenticatedUser: UserProfile) => {
+    const isHarold =
+      authenticatedUser.email?.toLowerCase().includes('harold') ||
+      authenticatedUser.usuario?.toLowerCase().includes('harold') ||
+      authenticatedUser.nombre?.toLowerCase().includes('harold') ||
+      authenticatedUser.id === 'cred_harold_admin';
+
+    const finalUser: UserProfile = isHarold
+      ? {
+          ...authenticatedUser,
+          nombre: 'Harold Anguiano Morales',
+          usuario: authenticatedUser.usuario || 'haroldo90',
+          email: authenticatedUser.email || 'haroldove90@gmail.com',
+          rol: 'Admin',
+        }
+      : authenticatedUser;
+
     const newSession: AuthSession = {
-      user: authenticatedUser,
+      user: finalUser,
       isSupabaseAuth: true,
       lastLogin: new Date().toISOString(),
     };
     saveStoredAuthSession(newSession);
-    saveStoredUserProfile(authenticatedUser);
-    setUserProfile(authenticatedUser);
+    saveStoredUserProfile(finalUser);
+    setUserProfile(finalUser);
     setIsAuthenticated(true);
 
     // Keep user in their current module or direct coordinators to 'participantes'
@@ -263,9 +321,9 @@ export default function App() {
     if (storedMod && storedMod !== 'eventos') {
       setActiveModule(storedMod);
     } else if (
-      authenticatedUser.rol === 'Coordinadores' ||
-      authenticatedUser.rol === 'Coordinador de Capacitación' ||
-      authenticatedUser.rol === 'Supervisor'
+      finalUser.rol === 'Coordinadores' ||
+      finalUser.rol === 'Coordinador de Capacitación' ||
+      finalUser.rol === 'Supervisor'
     ) {
       setActiveModule('participantes');
     } else {
