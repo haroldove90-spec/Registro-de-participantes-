@@ -1,4 +1,5 @@
 import { SystemNotification, EventoData, UserRole } from '../types';
+import { supabase } from '../lib/supabase';
 
 export const NOTIFICATION_SOUND_URL =
   'https://acjelqhrflkxnkttlrkr.supabase.co/storage/v1/object/public/sonidos/soundreality-notification-jump-455518.mp3';
@@ -39,6 +40,35 @@ try {
   }
 } catch {
   broadcastChannel = null;
+}
+
+/**
+ * Supabase Realtime Channel for instant cross-device notifications
+ */
+export const supabaseRealtimeAlerts = supabase.channel('sistema_capacitacion_alertas_cloud', {
+  config: { broadcast: { self: false } },
+});
+
+try {
+  supabaseRealtimeAlerts
+    .on('broadcast', { event: 'nueva_notificacion' }, (payload) => {
+      const notif = payload.payload as SystemNotification;
+      if (notif && notif.id) {
+        const current = getStoredNotifications();
+        if (!current.some((n) => n.id === notif.id)) {
+          saveStoredNotifications([notif, ...current]);
+          playNotificationSound();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('sistema_notificacion_evento', { detail: notif })
+            );
+          }
+        }
+      }
+    })
+    .subscribe();
+} catch (e) {
+  console.warn('Supabase realtime alerts subscription notice:', e);
 }
 
 /**
@@ -97,6 +127,17 @@ export function pushSystemNotification(notification: Omit<SystemNotification, 'i
     } catch (e) {
       console.warn('Broadcast error:', e);
     }
+  }
+
+  // Dispatch to all connected devices in realtime via Supabase
+  try {
+    supabaseRealtimeAlerts.send({
+      type: 'broadcast',
+      event: 'nueva_notificacion',
+      payload: newNotif,
+    });
+  } catch (e) {
+    console.warn('Supabase realtime broadcast send notice:', e);
   }
 
   return newNotif;

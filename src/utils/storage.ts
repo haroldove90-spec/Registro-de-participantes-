@@ -11,6 +11,89 @@ import {
 const STORAGE_KEY_EVENTOS = 'registro_participantes_eventos_v1';
 const STORAGE_KEY_PROFILE = 'registro_participantes_profile_v1';
 const STORAGE_KEY_SESSION = 'registro_participantes_auth_session_v1';
+const DATA_SYNC_BROADCAST_CHANNEL = 'sistema_capacitacion_data_sync_channel';
+
+// Cross-tab broadcast channel for instant state sync
+let dataBroadcastChannel: BroadcastChannel | null = null;
+try {
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    dataBroadcastChannel = new BroadcastChannel(DATA_SYNC_BROADCAST_CHANNEL);
+  }
+} catch {
+  dataBroadcastChannel = null;
+}
+
+/**
+ * Notifies all open tabs and windows that event data has changed
+ */
+export function broadcastEventosUpdated(eventos: EventoData[], source = 'local'): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('sistema_capacitacion_eventos_cambiados', {
+        detail: { eventos, source },
+      })
+    );
+  }
+  if (dataBroadcastChannel) {
+    try {
+      dataBroadcastChannel.postMessage({
+        type: 'EVENTOS_CHANGED',
+        eventos,
+        source,
+        timestamp: Date.now(),
+      });
+    } catch (e) {
+      console.warn('Broadcast error on data sync channel:', e);
+    }
+  }
+}
+
+/**
+ * Subscribes to real-time event updates across tabs, windows, and storage events
+ */
+export function subscribeToEventosChanges(callback: (eventos: EventoData[]) => void): () => void {
+  const handleCustomEvent = (e: Event) => {
+    const custom = e as CustomEvent<{ eventos: EventoData[]; source: string }>;
+    if (custom.detail?.eventos) {
+      callback(custom.detail.eventos);
+    }
+  };
+
+  const handleStorageEvent = (e: StorageEvent) => {
+    if (e.key === STORAGE_KEY_EVENTOS && e.newValue) {
+      try {
+        const parsed = JSON.parse(e.newValue);
+        if (Array.isArray(parsed)) {
+          callback(parsed);
+        }
+      } catch {}
+    }
+  };
+
+  const handleBroadcastMsg = (e: MessageEvent) => {
+    if (e.data?.type === 'EVENTOS_CHANGED' && Array.isArray(e.data?.eventos)) {
+      callback(e.data.eventos);
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('sistema_capacitacion_eventos_cambiados', handleCustomEvent);
+    window.addEventListener('storage', handleStorageEvent);
+    if (dataBroadcastChannel) {
+      dataBroadcastChannel.addEventListener('message', handleBroadcastMsg);
+    }
+  }
+
+  return () => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('sistema_capacitacion_eventos_cambiados', handleCustomEvent);
+      window.removeEventListener('storage', handleStorageEvent);
+      if (dataBroadcastChannel) {
+        dataBroadcastChannel.removeEventListener('message', handleBroadcastMsg);
+      }
+    }
+  };
+}
 
 /**
  * Calculates the next consecutive event ID for a given year (e.g. EVT-2026-1, EVT-2026-2, EVT-2027-1).
@@ -51,9 +134,12 @@ export function getStoredEventos(): EventoData[] {
   }
 }
 
-export function saveStoredEventos(eventos: EventoData[]): void {
+export function saveStoredEventos(eventos: EventoData[], skipBroadcast = false): void {
   try {
     localStorage.setItem(STORAGE_KEY_EVENTOS, JSON.stringify(eventos));
+    if (!skipBroadcast) {
+      broadcastEventosUpdated(eventos);
+    }
   } catch (err) {
     console.error('Error saving events to localStorage:', err);
   }

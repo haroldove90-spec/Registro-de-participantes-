@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ModuleType, EventoData, UserProfile, AuthSession, UserRole, Participant } from './types';
 import {
   getStoredEventos,
+  saveStoredEventos,
   addEvento,
   updateEvento,
   deleteEvento,
@@ -13,8 +14,15 @@ import {
   saveStoredAuthSession,
   clearStoredAuthSession,
   initializeSupabaseSync,
+  subscribeToEventosChanges,
 } from './utils/storage';
-import { signOutFromSupabase, getCurrentSupabaseUser, saveUserProfileToSupabase } from './lib/supabase';
+import {
+  signOutFromSupabase,
+  getCurrentSupabaseUser,
+  saveUserProfileToSupabase,
+  fetchEventosFromSupabase,
+  supabase,
+} from './lib/supabase';
 import { Sidebar } from './components/Navigation/Sidebar';
 import { MobileBottomNav } from './components/Navigation/MobileBottomNav';
 import { TopHeader } from './components/Navigation/TopHeader';
@@ -91,20 +99,104 @@ export default function App() {
     });
   }, [isAuthenticated]);
 
+  // Real-time synchronization without browser refresh:
+  // 1. Cross-tab and local window live sync
+  useEffect(() => {
+    const unsubscribe = subscribeToEventosChanges((newEventos) => {
+      setEventos(newEventos);
+    });
+    return unsubscribe;
+  }, []);
+
+  // 2. Cross-device live sync via Supabase Realtime channel and Postgres changes
+  useEffect(() => {
+    const liveChannel = supabase.channel('sistema_eventos_live_sync', {
+      config: { broadcast: { self: false } },
+    });
+
+    const refreshFromCloud = async () => {
+      try {
+        const remote = await fetchEventosFromSupabase();
+        if (remote && remote.length > 0) {
+          setEventos(remote);
+          saveStoredEventos(remote, true);
+        }
+      } catch (err) {
+        console.warn('Realtime cloud sync notice:', err);
+      }
+    };
+
+    liveChannel
+      .on('broadcast', { event: 'evento_sync' }, () => {
+        refreshFromCloud();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos' }, () => {
+        refreshFromCloud();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'participantes' }, () => {
+        refreshFromCloud();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(liveChannel);
+    };
+  }, []);
+
+  // 3. Heartbeat background polling (every 3.5 seconds) to ensure 100% sync even through firewalls/mobile networks
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        try {
+          const remote = await fetchEventosFromSupabase();
+          if (remote && remote.length > 0) {
+            setEventos((prev) => {
+              const prevStr = JSON.stringify(prev);
+              const nextStr = JSON.stringify(remote);
+              if (prevStr !== nextStr) {
+                saveStoredEventos(remote, true);
+                return remote;
+              }
+              return prev;
+            });
+          }
+        } catch {
+          // Silent fallback
+        }
+      }
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Helper to notify cloud clients instantly
+  const broadcastCloudSync = () => {
+    try {
+      supabase.channel('sistema_eventos_live_sync').send({
+        type: 'broadcast',
+        event: 'evento_sync',
+        payload: { timestamp: Date.now() },
+      });
+    } catch {}
+  };
+
   // Event Handlers
   const handleSaveNuevoEvento = (nuevoEvento: EventoData) => {
     const actualizados = addEvento(nuevoEvento);
     setEventos(actualizados);
+    broadcastCloudSync();
   };
 
   const handleUpdateEvento = (eventoActualizado: EventoData) => {
     const actualizados = updateEvento(eventoActualizado);
     setEventos(actualizados);
+    broadcastCloudSync();
   };
 
   const handleDeleteEvento = (id: string) => {
     const actualizados = deleteEvento(id);
     setEventos(actualizados);
+    broadcastCloudSync();
   };
 
   const handleSaveProfile = (updatedProfile: UserProfile) => {
@@ -253,10 +345,12 @@ export default function App() {
               onAddParticipant={(eventoId, participant) => {
                 const updated = addParticipantToEvento(eventoId, participant);
                 setEventos(updated);
+                broadcastCloudSync();
               }}
               onRemoveParticipant={(eventoId, participantId) => {
                 const updated = removeParticipantFromEvento(eventoId, participantId);
                 setEventos(updated);
+                broadcastCloudSync();
               }}
               onUpdateParticipant={(eventoId, participant) => {
                 const evt = eventos.find((e) => e.id === eventoId);
