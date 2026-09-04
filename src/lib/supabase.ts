@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { EventoData, Participant, UserProfile, UserRole } from '../types';
+import { EventoData, Participant, UserProfile, UserRole, UserCredential } from '../types';
 
 // Supabase project credentials provided by the user
 const DEFAULT_SUPABASE_URL = 'https://acjelqhrflkxnkttlrkr.supabase.co';
@@ -839,4 +839,156 @@ export async function getCurrentSupabaseUser(): Promise<UserProfile | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * =========================================================================
+ * COORDINATORS & SYSTEM USERS SYNCHRONIZATION (usuarios_sistema & perfiles_usuario)
+ * =========================================================================
+ */
+
+/**
+ * Upserts a coordinator into both 'usuarios_sistema' and 'perfiles_usuario' in Supabase
+ */
+export async function upsertCoordinatorToSupabase(
+  coord: UserCredential
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const targetRole = coord.rol === 'Admin' ? 'Admin' : 'Coordinadores';
+
+    // 1. Upsert into 'usuarios_sistema' table in Supabase
+    try {
+      const { error: errorUsuarios } = await supabase.from('usuarios_sistema').upsert(
+        {
+          id: coord.id,
+          nombre: coord.nombre,
+          usuario: coord.usuario,
+          email: coord.email,
+          clave: coord.clave,
+          rol: targetRole,
+          telefono: coord.telefono || '',
+          puesto: coord.puesto || 'Coordinador de Capacitación',
+          departamento: coord.departamento || 'Recursos Humanos / Capacitación',
+          rfc: coord.rfc || 'XAXX010101000',
+          avatar_url: coord.avatarUrl || '',
+          activo: coord.activo ?? true,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'usuario' }
+      );
+
+      if (errorUsuarios && !isTableMissingError(errorUsuarios)) {
+        console.warn('Supabase upsert usuarios_sistema warning:', errorUsuarios.message);
+      }
+    } catch (e: any) {
+      console.warn('Notice writing to usuarios_sistema:', e?.message);
+    }
+
+    // 2. Also upsert into 'perfiles_usuario' table in Supabase so it is visible in both places
+    try {
+      const { error: errorPerfiles } = await supabase.from('perfiles_usuario').upsert(
+        {
+          nombre: coord.nombre,
+          email: coord.email,
+          puesto: coord.puesto || 'Coordinador de Capacitación',
+          departamento: coord.departamento || 'Recursos Humanos / Capacitación',
+          rfc: coord.rfc || 'XAXX010101000',
+          telefono: coord.telefono || '',
+          rol: targetRole,
+          avatar_url: coord.avatarUrl || '',
+          notificaciones_email: true,
+          modo_oscuro: false,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'email' }
+      );
+
+      if (errorPerfiles && !isTableMissingError(errorPerfiles)) {
+        console.warn('Supabase upsert perfiles_usuario warning:', errorPerfiles.message);
+      }
+    } catch (e: any) {
+      console.warn('Notice writing to perfiles_usuario:', e?.message);
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error syncing coordinator to Supabase:', err);
+    return { success: false, error: err?.message };
+  }
+}
+
+/**
+ * Deletes a coordinator from Supabase (both usuarios_sistema and perfiles_usuario)
+ */
+export async function deleteCoordinatorFromSupabase(
+  id: string,
+  email?: string,
+  usuario?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (usuario) {
+      await supabase.from('usuarios_sistema').delete().eq('usuario', usuario);
+    }
+    if (id) {
+      await supabase.from('usuarios_sistema').delete().eq('id', id);
+    }
+    if (email) {
+      await supabase.from('usuarios_sistema').delete().eq('email', email);
+      await supabase.from('perfiles_usuario').delete().eq('email', email);
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting coordinator from Supabase:', err);
+    return { success: false, error: err?.message };
+  }
+}
+
+/**
+ * Fetches all coordinators/users from Supabase
+ */
+export async function fetchCoordinatorsFromSupabase(): Promise<UserCredential[] | null> {
+  try {
+    const { data, error } = await supabase
+      .from('usuarios_sistema')
+      .select('*')
+      .order('nombre', { ascending: true });
+
+    if (error) {
+      if (isTableMissingError(error)) return null;
+      console.warn('Notice fetching usuarios_sistema:', error.message);
+      return null;
+    }
+
+    if (!data || data.length === 0) return null;
+
+    return data.map((item: any) => ({
+      id: item.id || `coord_${Date.now()}`,
+      nombre: item.nombre,
+      usuario: item.usuario,
+      email: item.email,
+      clave: item.clave,
+      rol: item.rol === 'Admin' ? 'Admin' : 'Coordinadores',
+      telefono: item.telefono || '',
+      puesto: item.puesto || 'Coordinador de Capacitación',
+      departamento: item.departamento || 'Recursos Humanos / Capacitación',
+      rfc: item.rfc || 'XAXX010101000',
+      avatarUrl: item.avatar_url || '',
+      activo: item.activo ?? true,
+      fechaCreacion: item.created_at ? item.created_at.split('T')[0] : '2026-01-01',
+    }));
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Synchronizes all local credentials with Supabase in batch
+ */
+export async function syncAllCredentialsToSupabase(creds: UserCredential[]): Promise<number> {
+  let synced = 0;
+  for (const c of creds) {
+    const res = await upsertCoordinatorToSupabase(c);
+    if (res.success) synced++;
+  }
+  return synced;
 }

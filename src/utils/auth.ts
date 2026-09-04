@@ -1,4 +1,8 @@
 import { UserCredential, UserProfile, UserRole } from '../types';
+import {
+  upsertCoordinatorToSupabase,
+  deleteCoordinatorFromSupabase,
+} from '../lib/supabase';
 
 const STORAGE_KEY_CREDENTIALS = 'registro_participantes_credenciales_v1';
 
@@ -297,7 +301,11 @@ export function saveOrUpdateCoordinator(
         : c
     );
     saveStoredCredentials(updated);
-    return updated.find((c) => c.id === coordinatorData.id)!;
+    const saved = updated.find((c) => c.id === coordinatorData.id)!;
+    upsertCoordinatorToSupabase(saved).catch((err) =>
+      console.warn('Supabase coordinator update notice:', err)
+    );
+    return saved;
   }
 
   // Create new
@@ -311,6 +319,9 @@ export function saveOrUpdateCoordinator(
 
   const updated = [newCoord, ...current];
   saveStoredCredentials(updated);
+  upsertCoordinatorToSupabase(newCoord).catch((err) =>
+    console.warn('Supabase coordinator creation notice:', err)
+  );
   return newCoord;
 }
 
@@ -325,7 +336,11 @@ export function updateUserPassword(emailOrUsuario: string, newPassword: string):
   const updated = current.map((c) => {
     if (c.email.toLowerCase() === clean || c.usuario.toLowerCase() === clean) {
       found = true;
-      return { ...c, clave: newPassword };
+      const modified = { ...c, clave: newPassword };
+      upsertCoordinatorToSupabase(modified).catch((err) =>
+        console.warn('Supabase coordinator pass notice:', err)
+      );
+      return modified;
     }
     return c;
   });
@@ -353,6 +368,9 @@ export function deleteCoordinator(id: string): { success: boolean; error?: strin
 
   const updated = current.filter((c) => c.id !== id);
   saveStoredCredentials(updated);
+  deleteCoordinatorFromSupabase(target.id, target.email, target.usuario).catch((err) =>
+    console.warn('Supabase coordinator delete notice:', err)
+  );
   return { success: true };
 }
 

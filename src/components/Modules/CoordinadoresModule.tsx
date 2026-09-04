@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   UserPlus,
@@ -25,6 +25,7 @@ import {
   Send,
   HelpCircle,
   X,
+  RefreshCw,
 } from 'lucide-react';
 import { UserCredential, UserRole } from '../../types';
 import {
@@ -37,6 +38,11 @@ import {
   SYSTEM_OFFICIAL_URL,
   UPDATED_DATABASE_SQL,
 } from '../../utils/auth';
+import {
+  fetchCoordinatorsFromSupabase,
+  syncAllCredentialsToSupabase,
+  upsertCoordinatorToSupabase,
+} from '../../lib/supabase';
 
 interface CoordinadoresModuleProps {
   onNotify?: (message: string) => void;
@@ -46,6 +52,10 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
   const [credentialsList, setCredentialsList] = useState<UserCredential[]>(() =>
     getStoredCredentials()
   );
+
+  // Synchronization with Supabase
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncStatus, setSyncStatus] = useState<string>('');
 
   // Form State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -67,6 +77,74 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
   const [copiedSql, setCopiedSql] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+
+  // Auto-sync on component mount: upload existing local coordinators to Supabase and pull remote
+  useEffect(() => {
+    let isMounted = true;
+    const initSync = async () => {
+      setIsSyncing(true);
+      try {
+        const localCreds = getStoredCredentials();
+        await syncAllCredentialsToSupabase(localCreds);
+
+        const remote = await fetchCoordinatorsFromSupabase();
+        if (remote && remote.length > 0 && isMounted) {
+          const current = getStoredCredentials();
+          const merged = [...current];
+          remote.forEach((rc) => {
+            const idx = merged.findIndex(
+              (m) =>
+                m.usuario.toLowerCase() === rc.usuario.toLowerCase() ||
+                m.email.toLowerCase() === rc.email.toLowerCase()
+            );
+            if (idx >= 0) {
+              merged[idx] = { ...merged[idx], ...rc };
+            } else {
+              merged.push(rc);
+            }
+          });
+          setCredentialsList(merged);
+        }
+        if (isMounted) {
+          setSyncStatus('Sincronizado con Supabase');
+        }
+      } catch (e) {
+        console.warn('Auto-sync notice:', e);
+      } finally {
+        if (isMounted) {
+          setIsSyncing(false);
+        }
+      }
+    };
+    initSync();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    setFormSuccess('');
+    setFormError('');
+    try {
+      const current = getStoredCredentials();
+      const count = await syncAllCredentialsToSupabase(current);
+      const remote = await fetchCoordinatorsFromSupabase();
+      if (remote && remote.length > 0) {
+        setCredentialsList(remote);
+      } else {
+        setCredentialsList(getStoredCredentials());
+      }
+      setFormSuccess(
+        `¡Sincronización completada! ${count} usuario(s) respaldados en las tablas "usuarios_sistema" y "perfiles_usuario" de Supabase.`
+      );
+      setSyncStatus(`Última sincronización: ${new Date().toLocaleTimeString('es-MX')}`);
+    } catch (err: any) {
+      setFormError('Error al sincronizar con Supabase: ' + (err?.message || 'Verifica tu conexión'));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Real-time phone formatting with automatic Mexican country code (+52)
   const phoneFormatting = formatMexicanWhatsAppPhone(telefono);
@@ -166,8 +244,8 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
     setCredentialsList(getStoredCredentials());
     setFormSuccess(
       editingId
-        ? `Coordinador "${saved.nombre}" actualizado correctamente.`
-        : `¡Coordinador "${saved.nombre}" registrado con éxito! Ya puede ingresar al sistema con su rol asignado.`
+        ? `Coordinador "${saved.nombre}" actualizado y sincronizado en Supabase (tabla "usuarios_sistema").`
+        : `¡Coordinador "${saved.nombre}" registrado con éxito y guardado en Supabase (tabla "usuarios_sistema")! Ya puede iniciar sesión.`
     );
 
     if (!editingId) {
@@ -183,6 +261,7 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
         return;
       }
       setCredentialsList(getStoredCredentials());
+      setFormSuccess(`Coordinador "${name}" eliminado del sistema y de Supabase.`);
     }
   };
 
@@ -244,6 +323,16 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-blue-600/30"
+          >
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Supabase'}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowSqlModal(true)}
             className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
           >
@@ -255,12 +344,57 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
             href={SYSTEM_OFFICIAL_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-blue-600/30"
+            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
           >
             <ExternalLink className="w-4 h-4" />
             <span>Enlace del Sistema</span>
           </a>
         </div>
+      </div>
+
+      {/* Guía Visual: Dónde ver los coordinadores en Supabase */}
+      <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-2xl p-4 sm:p-5 border border-blue-600/30 text-white shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-400/30 flex items-center justify-center shrink-0 mt-0.5">
+            <Database className="w-5 h-5 text-blue-300" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-bold text-white">
+                ¿Dónde ver a tus coordinadores registrados en Supabase?
+              </h3>
+              <span className="text-[11px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
+                Tablas vinculadas
+              </span>
+              {syncStatus && (
+                <span className="text-[11px] px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium">
+                  {syncStatus}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              En tu panel de Supabase (menú <strong>Table Editor</strong> a la izquierda), los coordinadores se almacenan automáticamente en la tabla{' '}
+              <strong className="px-1.5 py-0.5 rounded bg-blue-900/60 border border-blue-500/40 text-blue-200 font-mono text-[11px]">
+                usuarios_sistema
+              </strong>{' '}
+              (usuario, clave, rol, teléfono) y en{' '}
+              <strong className="px-1.5 py-0.5 rounded bg-blue-900/60 border border-blue-500/40 text-blue-200 font-mono text-[11px]">
+                perfiles_usuario
+              </strong>.
+              Haz clic sobre la tabla <strong>usuarios_sistema</strong> en el menú lateral de Supabase para ver todos los registros.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleManualSync}
+          disabled={isSyncing}
+          className="px-3.5 py-2 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 border border-blue-400/30 text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer self-stretch md:self-auto justify-center"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 text-blue-300 ${isSyncing ? 'animate-spin' : ''}`} />
+          <span>{isSyncing ? 'Sincronizando...' : 'Forzar Sincronización'}</span>
+        </button>
       </div>
 
       {/* Grid: Form & List */}
