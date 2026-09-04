@@ -15,6 +15,7 @@ import {
   Users,
   CalendarDays,
   UserCheck,
+  X,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -24,6 +25,8 @@ interface SidebarProps {
   totalEventosCount: number;
   onLogout?: () => void;
   onRoleChange?: (newRole: UserRole) => void;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 const AVAILABLE_ROLES: { role: UserRole; label: string; desc: string }[] = [
@@ -46,6 +49,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalEventosCount,
   onLogout,
   onRoleChange,
+  isMobileOpen = false,
+  onCloseMobile,
 }) => {
   const [showRoleMenu, setShowRoleMenu] = useState(false);
 
@@ -120,22 +125,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
   });
 
   return (
-    <aside className="hidden md:flex flex-col w-72 bg-slate-900 text-slate-100 border-r border-slate-800 shrink-0 min-h-screen sticky top-0 h-screen overflow-y-auto">
-      {/* Brand Header */}
-      <div className="p-5 border-b border-slate-800/80 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 font-bold text-lg">
-          <Building2 className="w-5 h-5" />
+    <>
+      {/* Mobile Drawer Backdrop */}
+      {isMobileOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-slate-950/75 z-50 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+          onClick={onCloseMobile}
+        />
+      )}
+
+      {/* Sidebar: Desktop Sticky + Mobile Slide-over Drawer */}
+      <aside
+        className={`fixed md:sticky top-0 left-0 h-screen w-72 bg-slate-900 text-slate-100 border-r border-slate-800 z-50 md:z-20 shrink-0 flex flex-col overflow-y-auto transition-transform duration-300 ease-in-out ${
+          isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'
+        } ${!isMobileOpen ? 'hidden md:flex' : 'flex'}`}
+      >
+        {/* Brand Header */}
+        <div className="p-5 border-b border-slate-800/80 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 font-bold text-lg shrink-0">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-semibold text-base text-white leading-tight tracking-wide truncate">
+                Registro de Participantes
+              </h1>
+              <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5 truncate">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                Capacitación y Desarrollo
+              </p>
+            </div>
+          </div>
+
+          {onCloseMobile && (
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+              title="Cerrar navegación"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
-        <div>
-          <h1 className="font-semibold text-base text-white leading-tight tracking-wide">
-            Registro de Participantes
-          </h1>
-          <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            Capacitación y Desarrollo
-          </p>
-        </div>
-      </div>
 
       {/* Role Banner / Admin Role Switcher */}
       <div className="mx-3 mt-4 relative">
@@ -236,7 +268,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return (
             <button
               key={item.id}
-              onClick={() => setActiveModule(item.id)}
+              onClick={() => {
+                setActiveModule(item.id);
+                if (onCloseMobile) onCloseMobile();
+              }}
               className={`w-full group flex items-start gap-3 p-3 rounded-xl transition-all text-left relative cursor-pointer ${
                 isActive
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 font-medium'
@@ -300,11 +335,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Bottom Profile & Logout Footer */}
       <div className="p-3 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between gap-2">
         <button
-          onClick={() => setActiveModule('perfil')}
+          onClick={() => {
+            setActiveModule('perfil');
+            if (onCloseMobile) onCloseMobile();
+          }}
           className="flex items-center gap-3 flex-1 min-w-0 p-2 rounded-lg hover:bg-slate-800/80 transition-colors text-left cursor-pointer"
         >
           <img
-            src={userProfile.avatarUrl}
+            src={
+              userProfile.avatarUrl ||
+              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'
+            }
             alt={userProfile.nombre}
             className="w-9 h-9 rounded-full object-cover border-2 border-blue-500/50"
           />
@@ -326,6 +367,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
     </aside>
+  </>
   );
 };
 

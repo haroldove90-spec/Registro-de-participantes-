@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile, EventoData, UserRole } from '../../types';
 import { updateUserPassword } from '../../utils/auth';
+import { saveStoredCustomAvatar, getStoredCustomAvatar } from '../../utils/storage';
 import {
   User,
   Mail,
@@ -53,7 +54,7 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
   const [rfc, setRfc] = useState(userProfile.rfc);
   const [telefono, setTelefono] = useState(userProfile.telefono);
   const [rol, setRol] = useState<UserRole | string>(userProfile.rol);
-  const [avatarUrl, setAvatarUrl] = useState(userProfile.avatarUrl);
+  const [avatarUrl, setAvatarUrl] = useState(() => userProfile.avatarUrl || getStoredCustomAvatar() || '');
   const [fechaIngreso, setFechaIngreso] = useState(userProfile.fechaIngreso || new Date().toISOString().split('T')[0]);
   const [notificacionesEmail, setNotificacionesEmail] = useState(userProfile.notificacionesEmail);
   const [modoOscuro, setModoOscuro] = useState(userProfile.modoOscuro);
@@ -67,7 +68,14 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
     setRfc(userProfile.rfc);
     setTelefono(userProfile.telefono);
     setRol(userProfile.rol);
-    setAvatarUrl(userProfile.avatarUrl);
+    const custom = getStoredCustomAvatar();
+    if (userProfile.avatarUrl && !userProfile.avatarUrl.includes('unsplash')) {
+      setAvatarUrl(userProfile.avatarUrl);
+    } else if (custom) {
+      setAvatarUrl(custom);
+    } else {
+      setAvatarUrl(userProfile.avatarUrl);
+    }
     setFechaIngreso(userProfile.fechaIngreso || new Date().toISOString().split('T')[0]);
     setNotificacionesEmail(userProfile.notificacionesEmail);
     setModoOscuro(userProfile.modoOscuro);
@@ -114,13 +122,13 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
     0
   );
 
-  // Handle Photo File Upload with compression & reliable DataURL
+  // Handle Photo File Upload with square crop, lightweight compression & reliable DataURL
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      alert('La imagen seleccionada supera los 10MB. Por favor seleccione una imagen más liviana.');
+    if (file.size > 20 * 1024 * 1024) {
+      alert('La imagen seleccionada supera los 20MB. Por favor seleccione una imagen más liviana.');
       return;
     }
 
@@ -131,32 +139,29 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
 
       const img = new Image();
       img.onload = () => {
+        // High quality square avatar crop (256x256) - lightweight ~15KB, fast and durable
         const canvas = document.createElement('canvas');
-        const maxDim = 600;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > maxDim) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          }
-        } else {
-          if (height > maxDim) {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
+        const targetDim = 256;
+        canvas.width = targetDim;
+        canvas.height = targetDim;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+
+          // Center crop to preserve square aspect ratio without stretching
+          const minSide = Math.min(img.width, img.height);
+          const sx = (img.width - minSide) / 2;
+          const sy = (img.height - minSide) / 2;
+          ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, targetDim, targetDim);
+
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
           setAvatarUrl(compressedDataUrl);
 
-          // Inmediatamente guarda y sincroniza la foto
+          // Save directly to dedicated custom avatar store
+          saveStoredCustomAvatar(compressedDataUrl);
+
+          // Inmediatamente guarda y sincroniza la foto en el perfil
           const updatedProfile: UserProfile = {
             ...userProfile,
             nombre,
@@ -179,11 +184,17 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
       img.src = src;
     };
     reader.readAsDataURL(file);
+    if (e.target) {
+      e.target.value = '';
+    }
   };
 
   // Handle Profile Save
   const handleSubmitProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    if (avatarUrl) {
+      saveStoredCustomAvatar(avatarUrl);
+    }
     const updated: UserProfile = {
       ...userProfile,
       nombre,
@@ -482,6 +493,7 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
                     type="button"
                     onClick={() => {
                       setAvatarUrl('');
+                      saveStoredCustomAvatar('');
                       const updatedProfile: UserProfile = { ...userProfile, avatarUrl: '' };
                       onSaveProfile(updatedProfile);
                     }}

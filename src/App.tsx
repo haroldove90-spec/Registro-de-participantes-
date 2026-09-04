@@ -13,6 +13,10 @@ import {
   getStoredAuthSession,
   saveStoredAuthSession,
   clearStoredAuthSession,
+  getStoredActiveModule,
+  saveStoredActiveModule,
+  getStoredSelectedEventoId,
+  saveStoredSelectedEventoId,
   initializeSupabaseSync,
   subscribeToEventosChanges,
 } from './utils/storage';
@@ -36,9 +40,13 @@ import { FloatingNotificationModal } from './components/Notifications/FloatingNo
 import { FirmaCoordinadorView } from './components/Modules/FirmaCoordinadorView';
 
 export default function App() {
-  const [activeModule, setActiveModule] = useState<ModuleType>('eventos');
-  const [eventos, setEventos] = useState<EventoData[]>([]);
-  const [selectedEventoIdParaInscripcion, setSelectedEventoIdParaInscripcion] = useState<string | null>(null);
+  // Persistent active module and selected event ID so refreshing keeps user exactly where they are
+  const [activeModule, setActiveModule] = useState<ModuleType>(() => getStoredActiveModule());
+  const [eventos, setEventos] = useState<EventoData[]>(() => getStoredEventos());
+  const [selectedEventoIdParaInscripcion, setSelectedEventoIdParaInscripcion] = useState<string | null>(
+    () => getStoredSelectedEventoId()
+  );
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   // Support direct standalone access for coordinators opening the signature link from WhatsApp
   const [standaloneFirmaEventoId, setStandaloneFirmaEventoId] = useState<string | null>(() => {
@@ -55,16 +63,33 @@ export default function App() {
     return null;
   });
 
-  // Session state: check if valid user session is stored in localStorage
+  // Session state: check if valid user session is stored in localStorage/sessionStorage
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     const session = getStoredAuthSession();
-    return !!(session && session.user && session.user.email);
+    return !!(session && session.user && (session.user.email || session.user.usuario));
   });
 
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     const session = getStoredAuthSession();
     return session?.user || getStoredUserProfile();
   });
+
+  // Persist current module and selected event ID across reloads and sync with browser URL
+  useEffect(() => {
+    saveStoredActiveModule(activeModule);
+    saveStoredSelectedEventoId(selectedEventoIdParaInscripcion);
+
+    if (typeof window !== 'undefined' && !standaloneFirmaEventoId) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('modulo', activeModule);
+      if (selectedEventoIdParaInscripcion) {
+        url.searchParams.set('eventoId', selectedEventoIdParaInscripcion);
+      } else {
+        url.searchParams.delete('eventoId');
+      }
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [activeModule, selectedEventoIdParaInscripcion, standaloneFirmaEventoId]);
 
   // Verify persistent session & sync data on initial load
   useEffect(() => {
@@ -232,14 +257,19 @@ export default function App() {
     saveStoredUserProfile(authenticatedUser);
     setUserProfile(authenticatedUser);
     setIsAuthenticated(true);
-    // Coordinators are directed immediately to the Participant Registration module
-    if (
+
+    // Keep user in their current module or direct coordinators to 'participantes'
+    const storedMod = getStoredActiveModule();
+    if (storedMod && storedMod !== 'eventos') {
+      setActiveModule(storedMod);
+    } else if (
       authenticatedUser.rol === 'Coordinadores' ||
-      authenticatedUser.rol === 'Coordinador de Capacitación'
+      authenticatedUser.rol === 'Coordinador de Capacitación' ||
+      authenticatedUser.rol === 'Supervisor'
     ) {
-      setActiveModule('registro');
+      setActiveModule('participantes');
     } else {
-      setActiveModule('registro');
+      setActiveModule('eventos');
     }
   };
 
@@ -247,6 +277,12 @@ export default function App() {
     await signOutFromSupabase();
     clearStoredAuthSession();
     setIsAuthenticated(false);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('modulo');
+      url.searchParams.delete('eventoId');
+      window.history.replaceState({}, '', url.pathname);
+    }
   };
 
   // IF OPENED VIA WHATSAPP SIGNATURE LINK (Mobile/Tablet Coordinator Mode)
@@ -289,14 +325,19 @@ export default function App() {
         userProfile.modoOscuro ? 'dark' : ''
       }`}
     >
-      {/* Left Sidebar for Desktop / Tablet */}
+      {/* Left Sidebar for Desktop / Tablet + Slide-over Drawer for Mobile */}
       <Sidebar
         activeModule={activeModule}
-        setActiveModule={setActiveModule}
+        setActiveModule={(mod) => {
+          setActiveModule(mod);
+          setIsMobileNavOpen(false);
+        }}
         userProfile={userProfile}
         totalEventosCount={eventos.length}
         onLogout={handleLogout}
         onRoleChange={handleRoleChange}
+        isMobileOpen={isMobileNavOpen}
+        onCloseMobile={() => setIsMobileNavOpen(false)}
       />
 
       {/* Main Content Area */}
@@ -304,12 +345,16 @@ export default function App() {
         {/* Sticky Top Header */}
         <TopHeader
           activeModule={activeModule}
-          setActiveModule={setActiveModule}
+          setActiveModule={(mod) => {
+            setActiveModule(mod);
+            setIsMobileNavOpen(false);
+          }}
           userProfile={userProfile}
           eventos={eventos}
           onSyncedEventos={(synced) => setEventos(synced)}
           onLogout={handleLogout}
           onRoleChange={handleRoleChange}
+          onOpenMobileMenu={() => setIsMobileNavOpen(true)}
         />
 
         {/* Dynamic Module Body */}
@@ -389,8 +434,13 @@ export default function App() {
       {/* Mobile Bottom Navigation */}
       <MobileBottomNav
         activeModule={activeModule}
-        setActiveModule={setActiveModule}
+        setActiveModule={(mod) => {
+          setActiveModule(mod);
+          setIsMobileNavOpen(false);
+        }}
         totalEventosCount={eventos.length}
+        userProfile={userProfile}
+        onOpenMobileMenu={() => setIsMobileNavOpen(true)}
       />
 
       {/* Floating System Notifications with Sound */}

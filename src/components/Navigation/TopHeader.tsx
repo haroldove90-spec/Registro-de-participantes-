@@ -5,6 +5,7 @@ import {
   LogOut,
   Layers,
   ChevronDown,
+  Menu,
 } from 'lucide-react';
 import { SmartSupabaseButton } from './SmartSupabaseButton';
 
@@ -16,6 +17,7 @@ interface TopHeaderProps {
   onSyncedEventos?: (eventos: EventoData[]) => void;
   onLogout?: () => void;
   onRoleChange?: (newRole: UserRole) => void;
+  onOpenMobileMenu?: () => void;
 }
 
 const AVAILABLE_ROLES: { role: UserRole; label: string }[] = [
@@ -31,6 +33,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onSyncedEventos,
   onLogout,
   onRoleChange,
+  onOpenMobileMenu,
 }) => {
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
 
@@ -105,15 +108,29 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     <header className="bg-white border-b border-slate-200/80 sticky top-0 z-30 px-4 sm:px-8 py-4 shadow-2xs">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Title & Subtitle */}
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
-            <Building2 className="w-3.5 h-3.5" />
-            <span>Sistema de Control de Capacitación</span>
-            <span className="text-slate-300">•</span>
-            <span className="text-slate-500 font-normal capitalize">{currentDate}</span>
+        <div className="flex items-center justify-between sm:block w-full sm:w-auto">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
+              <Building2 className="w-3.5 h-3.5" />
+              <span>Sistema de Control de Capacitación</span>
+              <span className="text-slate-300 hidden sm:inline">•</span>
+              <span className="text-slate-500 font-normal capitalize hidden sm:inline">{currentDate}</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{title}</h2>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">{subtitle}</p>
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{title}</h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">{subtitle}</p>
+
+          {onOpenMobileMenu && (
+            <button
+              type="button"
+              onClick={onOpenMobileMenu}
+              className="md:hidden p-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 shadow-sm transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ml-3"
+              title="Abrir menú de módulos completo"
+            >
+              <Menu className="w-4 h-4" />
+              <span className="text-xs font-semibold">Menú</span>
+            </button>
+          )}
         </div>
 
         {/* Top Right Info & Actions */}
@@ -194,7 +211,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             title="Ver Perfil y Configuración"
           >
             <img
-              src={userProfile.avatarUrl}
+              src={
+                userProfile.avatarUrl ||
+                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'
+              }
               alt={userProfile.nombre}
               className="w-8 h-8 rounded-lg object-cover border border-slate-200"
             />

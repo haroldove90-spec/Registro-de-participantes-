@@ -518,43 +518,27 @@ export async function saveUserProfileToSupabase(profile: UserProfile): Promise<b
   try {
     const targetRole = normalizeUserRole(profile.rol);
 
-    // 1. Update Auth user metadata so it persists in the active Supabase session
+    // 1. Update Auth user metadata only if there is an active session
     try {
-      await supabase.auth.updateUser({
-        data: {
-          nombre: profile.nombre,
-          puesto: profile.puesto,
-          departamento: profile.departamento,
-          rfc: profile.rfc,
-          telefono: profile.telefono,
-          rol: targetRole,
-          avatarUrl: profile.avatarUrl,
-        },
-      });
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData && sessionData.session) {
+        await supabase.auth.updateUser({
+          data: {
+            nombre: profile.nombre,
+            puesto: profile.puesto,
+            departamento: profile.departamento,
+            rfc: profile.rfc,
+            telefono: profile.telefono,
+            rol: targetRole,
+            avatarUrl: profile.avatarUrl,
+          },
+        });
+      }
     } catch {}
 
     // 2. Upsert into 'perfiles_usuario' table in Supabase PostgreSQL
-    let { error } = await supabase.from('perfiles_usuario').upsert(
-      {
-        nombre: profile.nombre,
-        email: profile.email,
-        puesto: profile.puesto,
-        departamento: profile.departamento,
-        rfc: profile.rfc,
-        telefono: profile.telefono,
-        rol: targetRole,
-        avatar_url: profile.avatarUrl,
-        fecha_ingreso: profile.fechaIngreso,
-        notificaciones_email: profile.notificacionesEmail,
-        modo_oscuro: profile.modoOscuro,
-      },
-      { onConflict: 'email' }
-    );
-
-    // Fallback if Supabase database has not run the updated check constraint yet
-    if (error && error.message && error.message.includes('perfiles_usuario_rol_check')) {
-      const legacyRole = targetRole === 'Admin' ? 'Administrador de Capacitación' : 'Coordinador de Capacitación';
-      const retry = await supabase.from('perfiles_usuario').upsert(
+    try {
+      let { error } = await supabase.from('perfiles_usuario').upsert(
         {
           nombre: profile.nombre,
           email: profile.email,
@@ -562,7 +546,7 @@ export async function saveUserProfileToSupabase(profile: UserProfile): Promise<b
           departamento: profile.departamento,
           rfc: profile.rfc,
           telefono: profile.telefono,
-          rol: legacyRole,
+          rol: targetRole,
           avatar_url: profile.avatarUrl,
           fecha_ingreso: profile.fechaIngreso,
           notificaciones_email: profile.notificacionesEmail,
@@ -570,18 +554,46 @@ export async function saveUserProfileToSupabase(profile: UserProfile): Promise<b
         },
         { onConflict: 'email' }
       );
-      if (!retry.error) {
-        return true;
+
+      // Fallback if Supabase database has not run the updated check constraint yet
+      if (error && error.message && error.message.includes('perfiles_usuario_rol_check')) {
+        const legacyRole = targetRole === 'Admin' ? 'Administrador de Capacitación' : 'Coordinador de Capacitación';
+        await supabase.from('perfiles_usuario').upsert(
+          {
+            nombre: profile.nombre,
+            email: profile.email,
+            puesto: profile.puesto,
+            departamento: profile.departamento,
+            rfc: profile.rfc,
+            telefono: profile.telefono,
+            rol: legacyRole,
+            avatar_url: profile.avatarUrl,
+            fecha_ingreso: profile.fechaIngreso,
+            notificaciones_email: profile.notificacionesEmail,
+            modo_oscuro: profile.modoOscuro,
+          },
+          { onConflict: 'email' }
+        );
       }
+    } catch (e: any) {
+      // Non-blocking catch for network/table issues
     }
 
-    if (error) {
-      if (isTableMissingError(error)) {
-        return false;
-      }
-      console.warn('Supabase save profile notice:', error.message);
-      return false;
-    }
+    // 3. Keep 'usuarios_sistema' table in sync with avatar
+    try {
+      await supabase
+        .from('usuarios_sistema')
+        .update({
+          avatar_url: profile.avatarUrl,
+          nombre: profile.nombre,
+          telefono: profile.telefono,
+          puesto: profile.puesto,
+          departamento: profile.departamento,
+          updated_at: new Date().toISOString(),
+        })
+        .or(`email.eq.${profile.email},usuario.eq.${profile.usuario || ''}`);
+    } catch {}
+
     return true;
   } catch (err: any) {
     if (!isTableMissingError(err)) {

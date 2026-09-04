@@ -43,6 +43,7 @@ import {
   syncAllCredentialsToSupabase,
   upsertCoordinatorToSupabase,
 } from '../../lib/supabase';
+import { getStoredCustomAvatar } from '../../utils/storage';
 
 interface CoordinadoresModuleProps {
   onNotify?: (message: string) => void;
@@ -688,6 +689,7 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
                       <div className="flex items-start gap-3.5 min-w-0">
                         <img
                           src={
+                            (isHaroldAdmin && getStoredCustomAvatar()) ||
                             coord.avatarUrl ||
                             'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'
                           }

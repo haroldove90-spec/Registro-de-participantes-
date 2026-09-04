@@ -1,5 +1,6 @@
-import { EventoData, UserProfile, AuthSession, UserRole, Participant } from '../types';
+import { EventoData, UserProfile, AuthSession, UserRole, Participant, ModuleType } from '../types';
 import { INITIAL_EVENTOS, INITIAL_USER_PROFILE } from '../data/mockData';
+import { getStoredCredentials, saveStoredCredentials } from './auth';
 import {
   fetchEventosFromSupabase,
   upsertEventoToSupabase,
@@ -11,6 +12,10 @@ import {
 const STORAGE_KEY_EVENTOS = 'registro_participantes_eventos_v1';
 const STORAGE_KEY_PROFILE = 'registro_participantes_profile_v1';
 const STORAGE_KEY_SESSION = 'registro_participantes_auth_session_v1';
+const STORAGE_KEY_LOGGED_OUT = 'registro_participantes_explicitly_logged_out_v1';
+const STORAGE_KEY_ACTIVE_MODULE = 'registro_participantes_active_module_v1';
+const STORAGE_KEY_SELECTED_EVENTO = 'registro_participantes_selected_evento_v1';
+export const STORAGE_KEY_CUSTOM_AVATAR = 'registro_participantes_user_avatar_v1';
 const DATA_SYNC_BROADCAST_CHANNEL = 'sistema_capacitacion_data_sync_channel';
 
 // Cross-tab broadcast channel for instant state sync
@@ -262,14 +267,47 @@ export function clearAllEventos(): EventoData[] {
   return [];
 }
 
+export function getStoredCustomAvatar(): string | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    const direct = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+    if (direct && direct.trim().length > 5) return direct.trim();
+    const sessionAvatar = sessionStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+    if (sessionAvatar && sessionAvatar.trim().length > 5) return sessionAvatar.trim();
+  } catch {}
+  return null;
+}
+
+export function saveStoredCustomAvatar(avatarUrl: string): void {
+  try {
+    if (typeof window === 'undefined') return;
+    if (avatarUrl && avatarUrl.trim().length > 5) {
+      localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, avatarUrl.trim());
+      sessionStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, avatarUrl.trim());
+    } else {
+      localStorage.removeItem(STORAGE_KEY_CUSTOM_AVATAR);
+      sessionStorage.removeItem(STORAGE_KEY_CUSTOM_AVATAR);
+    }
+  } catch {}
+}
+
 export function getStoredUserProfile(): UserProfile {
   try {
+    const customAvatar = getStoredCustomAvatar();
     const data = localStorage.getItem(STORAGE_KEY_PROFILE);
     if (!data) {
-      localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(INITIAL_USER_PROFILE));
-      return INITIAL_USER_PROFILE;
+      const initial = { ...INITIAL_USER_PROFILE };
+      if (customAvatar) {
+        initial.avatarUrl = customAvatar;
+      }
+      localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(initial));
+      return initial;
     }
-    return JSON.parse(data);
+    const parsed: UserProfile = JSON.parse(data);
+    if (customAvatar && (!parsed.avatarUrl || parsed.avatarUrl.includes('unsplash') || customAvatar.startsWith('data:image'))) {
+      parsed.avatarUrl = customAvatar;
+    }
+    return parsed;
   } catch (err) {
     console.error('Error loading profile from localStorage:', err);
     return INITIAL_USER_PROFILE;
@@ -278,7 +316,38 @@ export function getStoredUserProfile(): UserProfile {
 
 export function saveStoredUserProfile(profile: UserProfile): void {
   try {
+    if (profile.avatarUrl && profile.avatarUrl.trim().length > 5) {
+      saveStoredCustomAvatar(profile.avatarUrl);
+    }
     localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(profile));
+
+    // Keep credentials directory in sync with updated profile photo and details
+    try {
+      const creds = getStoredCredentials();
+      let updated = false;
+      const updatedCreds = creds.map((c) => {
+        const isMatch =
+          (profile.email && c.email.toLowerCase() === profile.email.toLowerCase()) ||
+          (profile.usuario && c.usuario.toLowerCase() === profile.usuario.toLowerCase()) ||
+          (c.id === 'cred_harold_admin' && (profile.email?.toLowerCase().includes('haroldo90') || profile.usuario?.toLowerCase() === 'haroldo90'));
+        if (isMatch) {
+          updated = true;
+          return {
+            ...c,
+            nombre: profile.nombre || c.nombre,
+            avatarUrl: profile.avatarUrl || c.avatarUrl,
+            telefono: profile.telefono || c.telefono,
+            puesto: profile.puesto || c.puesto,
+            departamento: profile.departamento || c.departamento,
+          };
+        }
+        return c;
+      });
+      if (updated) {
+        saveStoredCredentials(updatedCreds);
+      }
+    } catch {}
+
     // Async sync to Supabase in background
     saveUserProfileToSupabase(profile).catch((err) =>
       console.warn('Supabase profile save notice:', err)
@@ -289,21 +358,67 @@ export function saveStoredUserProfile(profile: UserProfile): void {
 }
 
 /**
- * Auth Session Storage
+ * Auth Session Storage with Multi-Tier Persistence
+ * Guarantees that refreshing the browser never kicks the user out of their session.
  */
 export function getStoredAuthSession(): AuthSession | null {
   try {
-    const data = localStorage.getItem(STORAGE_KEY_SESSION);
-    if (!data) return null;
-    return JSON.parse(data);
+    if (typeof window === 'undefined') return null;
+
+    // 1. If user explicitly clicked "Cerrar sesión", respect that until next explicit login
+    const explicitlyLoggedOut = localStorage.getItem(STORAGE_KEY_LOGGED_OUT) === 'true';
+    if (explicitlyLoggedOut) {
+      return null;
+    }
+
+    // 2. Primary check: localStorage
+    const localData = localStorage.getItem(STORAGE_KEY_SESSION);
+    if (localData) {
+      const parsed: AuthSession = JSON.parse(localData);
+      if (parsed && parsed.user && (parsed.user.email || parsed.user.usuario)) {
+        return parsed;
+      }
+    }
+
+    // 3. Redundant check: sessionStorage (e.g. if localStorage was wiped or in sandboxed iframe)
+    const sessionData = sessionStorage.getItem(STORAGE_KEY_SESSION);
+    if (sessionData) {
+      const parsed: AuthSession = JSON.parse(sessionData);
+      if (parsed && parsed.user && (parsed.user.email || parsed.user.usuario)) {
+        try {
+          localStorage.setItem(STORAGE_KEY_SESSION, sessionData);
+        } catch {}
+        return parsed;
+      }
+    }
+
+    // 4. Stored user profile fallback (if profile exists in localStorage and not explicitly logged out)
+    const profile = getStoredUserProfile();
+    if (profile && (profile.email || profile.usuario)) {
+      const fallbackSession: AuthSession = {
+        user: profile,
+        isSupabaseAuth: true,
+        lastLogin: new Date().toISOString(),
+      };
+      saveStoredAuthSession(fallbackSession);
+      return fallbackSession;
+    }
   } catch (err) {
-    return null;
+    console.warn('Error reading stored auth session:', err);
   }
+  return null;
 }
 
 export function saveStoredAuthSession(session: AuthSession): void {
   try {
-    localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(session));
+    const serialized = JSON.stringify(session);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_SESSION, serialized);
+      sessionStorage.setItem(STORAGE_KEY_SESSION, serialized);
+      // Remove any explicit logged out flag on successful login/session save
+      localStorage.removeItem(STORAGE_KEY_LOGGED_OUT);
+      sessionStorage.removeItem(STORAGE_KEY_LOGGED_OUT);
+    }
     saveStoredUserProfile(session.user);
   } catch (err) {
     console.error('Error saving auth session:', err);
@@ -312,10 +427,95 @@ export function saveStoredAuthSession(session: AuthSession): void {
 
 export function clearStoredAuthSession(): void {
   try {
-    localStorage.removeItem(STORAGE_KEY_SESSION);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY_SESSION);
+      sessionStorage.removeItem(STORAGE_KEY_SESSION);
+      // Flag explicitly that the user has chosen to log out
+      localStorage.setItem(STORAGE_KEY_LOGGED_OUT, 'true');
+    }
   } catch (err) {
     console.error('Error clearing auth session:', err);
   }
+}
+
+/**
+ * Navigation & Active Module Persistence
+ * Keeps the user exactly where they were upon refreshing the browser.
+ */
+function isValidModule(m: string): boolean {
+  return [
+    'eventos',
+    'participantes',
+    'metricas',
+    'supervisores',
+    'coordinadores',
+    'perfil',
+    'registro',
+    'historial',
+    'firmas',
+  ].includes(m);
+}
+
+export function getStoredActiveModule(): ModuleType {
+  try {
+    if (typeof window !== 'undefined') {
+      // 1. Priority: URL search parameter (?modulo=participantes)
+      const searchParams = new URLSearchParams(window.location.search);
+      const qMod = searchParams.get('modulo');
+      if (qMod && isValidModule(qMod)) {
+        return qMod as ModuleType;
+      }
+
+      // 2. Hash (#participantes)
+      const hash = window.location.hash.replace('#', '').trim();
+      if (hash && isValidModule(hash)) {
+        return hash as ModuleType;
+      }
+
+      // 3. LocalStorage persistence
+      const stored = localStorage.getItem(STORAGE_KEY_ACTIVE_MODULE);
+      if (stored && isValidModule(stored)) {
+        return stored as ModuleType;
+      }
+    }
+  } catch {}
+  return 'eventos';
+}
+
+export function saveStoredActiveModule(modulo: ModuleType): void {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_ACTIVE_MODULE, modulo);
+    }
+  } catch {}
+}
+
+export function getStoredSelectedEventoId(): string | null {
+  try {
+    if (typeof window !== 'undefined') {
+      // 1. Priority: URL query parameter (?eventoId=EVT-2026-1)
+      const searchParams = new URLSearchParams(window.location.search);
+      const qId = searchParams.get('eventoId');
+      if (qId) return qId;
+
+      // 2. LocalStorage persistence
+      const stored = localStorage.getItem(STORAGE_KEY_SELECTED_EVENTO);
+      if (stored) return stored;
+    }
+  } catch {}
+  return null;
+}
+
+export function saveStoredSelectedEventoId(eventoId: string | null): void {
+  try {
+    if (typeof window !== 'undefined') {
+      if (eventoId) {
+        localStorage.setItem(STORAGE_KEY_SELECTED_EVENTO, eventoId);
+      } else {
+        localStorage.removeItem(STORAGE_KEY_SELECTED_EVENTO);
+      }
+    }
+  } catch {}
 }
 
 /**
@@ -347,6 +547,16 @@ export async function initializeSupabaseSync(): Promise<{
     }
 
     if (remoteProfile) {
+      const localCustomAvatar = getStoredCustomAvatar();
+      // Protect local custom uploaded avatar from being overridden by blank/old remote value
+      if (
+        localCustomAvatar &&
+        (!remoteProfile.avatarUrl ||
+          remoteProfile.avatarUrl.includes('unsplash') ||
+          localCustomAvatar.startsWith('data:image'))
+      ) {
+        remoteProfile.avatarUrl = localCustomAvatar;
+      }
       profile = remoteProfile;
       saveStoredUserProfile(profile);
       synced = true;
