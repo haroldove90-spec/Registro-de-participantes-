@@ -63,9 +63,9 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
   const [usuario, setUsuario] = useState('');
   const [email, setEmail] = useState('');
   const [telefono, setTelefono] = useState('');
-  const [rol, setRol] = useState<UserRole>('Coordinadores');
-  const [clave, setClave] = useState(() => generateSecurePassword('Coord'));
-  const [puesto, setPuesto] = useState('Coordinador de Capacitación');
+  const [rol, setRol] = useState<UserRole>('Supervisor');
+  const [clave, setClave] = useState(() => generateSecurePassword('Superv'));
+  const [puesto, setPuesto] = useState('Supervisor de Capacitación');
   const [departamento, setDepartamento] = useState('Recursos Humanos / Capacitación');
   const [showClave, setShowClave] = useState(false);
 
@@ -309,14 +309,14 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
         <div className="space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-semibold">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Módulo de Administración Exclusivo</span>
+            <span>Módulo de Supervisores</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-            Registro y Gestión de Coordinadores
+            Registro de Supervisores
           </h1>
           <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
-            Asigna roles operativos, genera credenciales seguras y comparte accesos instantáneamente por
-            WhatsApp junto con el enlace oficial del sistema.
+            Registra y gestiona las cuentas de supervisores. Podrán registrar nuevos eventos y participantes con
+            alertas flotantes y notificaciones sonoras en tiempo real.
           </p>
         </div>
 
@@ -546,8 +546,8 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
                 onChange={(e) => setRol(e.target.value as UserRole)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 text-sm font-semibold bg-slate-50 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
               >
-                <option value="Coordinadores">Coordinadores (Registro de Participantes y Perfil)</option>
-                <option value="Admin">Admin (Control Total, Edición, Borrado y Desactivación)</option>
+                <option value="Supervisor">Supervisor (Registro de Eventos y Participantes)</option>
+                <option value="Admin">Admin (Control Total, Exportación Oficial e Impresión)</option>
               </select>
               <p className="text-[11px] text-slate-500 mt-0.5">
                 Al entrar al sistema, el usuario accederá con su respectivo rol y los eventos se mantendrán perfectamente sincronizados.
@@ -885,3 +885,5 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
     </div>
   );
 };
+
+export const SupervisoresModule = CoordinadoresModule;

@@ -34,6 +34,11 @@ import {
   ArrowLeft,
   CalendarDays,
   UserPlus,
+  Smartphone,
+  Share2,
+  Copy,
+  Lock,
+  ExternalLink,
 } from 'lucide-react';
 import {
   exportEventoToExcel,
@@ -45,6 +50,8 @@ import { SignatureCanvas } from '../SignatureCanvas';
 import { CurrencyInput } from '../CurrencyInput';
 import { HojaAsistenciaOficialModal } from '../HojaAsistenciaOficialModal';
 import { getNextEventoId } from '../../utils/storage';
+import { notifyAdminCreatedEvent, notifySupervisorCreatedEvent } from '../../utils/notifications';
+import { FirmaCoordinadorView } from './FirmaCoordinadorView';
 
 interface EventosModuleProps {
   eventos: EventoData[];
@@ -123,6 +130,47 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
   const [otrosCostos, setOtrosCostos] = useState<number>(0);
   const [firmaRH, setFirmaRH] = useState('');
   const [aprobadoRH, setAprobadoRH] = useState(true);
+
+  // Field Coordinator info
+  const [coordinadorNombre, setCoordinadorNombre] = useState('');
+  const [coordinadorPuesto, setCoordinadorPuesto] = useState('');
+  const [coordinadorWhatsApp, setCoordinadorWhatsApp] = useState('');
+
+  // Mobile / Field Signature collection modal
+  const [viewingFirmaEvento, setViewingFirmaEvento] = useState<EventoData | null>(null);
+  const [copiedLinkNotice, setCopiedLinkNotice] = useState<string | null>(null);
+
+  // Helper to generate personalized event signature link
+  const getEventSignatureLink = (eventoId: string) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    return `${origin}/?modulo=firmas&eventoId=${encodeURIComponent(eventoId)}`;
+  };
+
+  const handleShareLinkWhatsApp = (evt: EventoData) => {
+    const link = getEventSignatureLink(evt.id);
+    const cleanPhone = (evt.coordinadorWhatsApp || '').replace(/\D/g, '');
+    const message = `📋 *SISTEMA DE CAPACITACIÓN - CONTROL DE ASISTENCIA Y FIRMAS*\n\n` +
+      `Estimado/a *${evt.coordinadorNombre || 'Coordinador(a)'}*,\n` +
+      `Se te ha asignado el evento *${evt.nombreEvento}* (Clave: ${evt.id}).\n\n` +
+      `📅 Fecha: ${evt.fechaInicio} al ${evt.fechaTermino}\n` +
+      `👥 Participantes programados: ${evt.participantes?.length || 0}\n\n` +
+      `Por favor abre el siguiente enlace oficial desde tu celular o tablet para recabar las firmas digitales de los participantes:\n` +
+      `🔗 ${link}\n\n` +
+      `Las firmas se reflejan en tiempo real para el Administrador y el Supervisor.`;
+
+    const waUrl = cleanPhone
+      ? `https://wa.me/${cleanPhone.startsWith('52') ? cleanPhone : '52' + cleanPhone}?text=${encodeURIComponent(message)}`
+      : `https://wa.me/?text=${encodeURIComponent(message)}`;
+
+    window.open(waUrl, '_blank');
+  };
+
+  const handleCopySignatureLink = (evt: EventoData) => {
+    const link = getEventSignatureLink(evt.id);
+    navigator.clipboard.writeText(link);
+    setCopiedLinkNotice(`¡Enlace de firmas para el evento ${evt.id} copiado al portapapeles!`);
+    setTimeout(() => setCopiedLinkNotice(null), 4000);
+  };
 
   // Modal for viewing attachment
   const [viewingAttachment, setViewingAttachment] = useState<boolean>(false);
@@ -221,6 +269,9 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
     setOtrosCostos(0);
     setFirmaRH('');
     setAprobadoRH(true);
+    setCoordinadorNombre('');
+    setCoordinadorPuesto('');
+    setCoordinadorWhatsApp('');
     setFormErrors([]);
     setViewMode('formulario');
   };
@@ -257,6 +308,9 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
     setOtrosCostos(evt.costos?.otrosCostos || 0);
     setFirmaRH(evt.firmaRH || '');
     setAprobadoRH(evt.aprobadoRH ?? true);
+    setCoordinadorNombre(evt.coordinadorNombre || '');
+    setCoordinadorPuesto(evt.coordinadorPuesto || '');
+    setCoordinadorWhatsApp(evt.coordinadorWhatsApp || '');
     setFormErrors([]);
     setViewMode('formulario');
   };
@@ -328,6 +382,11 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
         },
         firmaRH,
         aprobadoRH,
+        coordinadorNombre,
+        coordinadorPuesto,
+        coordinadorWhatsApp,
+        registradoPor: existing?.registradoPor || (isAdmin ? 'Admin' : 'Supervisor'),
+        registradoPorNombre: existing?.registradoPorNombre || userProfile?.nombre || (isAdmin ? 'Harold Anguiano' : 'Supervisor'),
         participantes: existingParticipants,
         fechaCreacion: existing?.fechaCreacion || new Date().toISOString(),
         estado: existing?.estado || 'Registrado',
@@ -377,6 +436,11 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
         },
         firmaRH,
         aprobadoRH,
+        coordinadorNombre,
+        coordinadorPuesto,
+        coordinadorWhatsApp,
+        registradoPor: isAdmin ? 'Admin' : 'Supervisor',
+        registradoPorNombre: userProfile?.nombre || (isAdmin ? 'Harold Anguiano' : 'Supervisor'),
         participantes: [],
         fechaCreacion: new Date().toISOString(),
         estado: 'Registrado',
@@ -384,9 +448,17 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
       };
 
       onSaveEvento(nuevoEvento);
+
+      // Trigger cross-role notification with sound
+      if (isAdmin) {
+        notifyAdminCreatedEvent(nuevoEvento, userProfile?.nombre || 'Harold Anguiano');
+      } else {
+        notifySupervisorCreatedEvent(nuevoEvento, userProfile?.nombre || 'Supervisor');
+      }
+
       setActionNotice({
         type: 'success',
-        text: `Evento ${nuevoEvento.id} registrado exitosamente. Ahora puedes agregar participantes desde el módulo "Registro de Participantes".`,
+        text: `Evento ${nuevoEvento.id} registrado exitosamente. Notificación enviada y lista para recabar firmas.`,
       });
     }
 
@@ -524,14 +596,16 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
                   <span>+ Registrar Nuevo Evento</span>
                 </button>
 
-                <button
-                  onClick={() => exportAllEventosToExcel(eventos)}
-                  className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-colors flex items-center gap-2 cursor-pointer"
-                  title="Descargar todos los eventos en Excel"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                  <span className="hidden sm:inline">Excel Total</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => exportAllEventosToExcel(eventos)}
+                    className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-colors flex items-center gap-2 cursor-pointer"
+                    title="Descargar todos los eventos en Excel (Solo Administrador)"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                    <span className="hidden sm:inline">Excel Total</span>
+                  </button>
+                )}
               </>
             ) : (
               <button
@@ -648,9 +722,15 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
                         <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
                           Convocatoria Abierta
                         </span>
+                        {evt.coordinadorNombre && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                            <Smartphone className="w-3 h-3 text-emerald-600" />
+                            Coord: {evt.coordinadorNombre}
+                          </span>
+                        )}
                       </div>
 
-                      {/* Action buttons (Ver Detalle, 1:1, Excel, PDF, Editar, Suspender, Borrar) */}
+                      {/* Action buttons (Ver Detalle, 1:1, Excel, PDF, WhatsApp, Link, Firmas, Editar, Suspender, Borrar) */}
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {/* Aceptar Participar / Inscribir Participante */}
                         {onSelectEventoParaInscripcion && (
@@ -673,33 +753,77 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
                           <span>Ver Detalle</span>
                         </button>
 
-                        {/* Formato 1:1 Oficial */}
+                        {/* Impresión y Exportación: Solo Admin */}
+                        {isAdmin ? (
+                          <>
+                            {/* Formato 1:1 Oficial */}
+                            <button
+                              onClick={() => setOfficialSheetEvento(evt)}
+                              className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                              title="Generar formato oficial 1:1 para imprimir"
+                            >
+                              <Printer className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Formato 1:1</span>
+                            </button>
+
+                            {/* Excel */}
+                            <button
+                              onClick={() => exportEventoToExcel(evt)}
+                              className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-emerald-700 text-xs font-medium transition-all flex items-center gap-1 cursor-pointer"
+                              title="Exportar a Excel"
+                            >
+                              <FileSpreadsheet className="w-3.5 h-3.5" />
+                              <span>Excel</span>
+                            </button>
+
+                            {/* PDF */}
+                            <button
+                              onClick={() => exportEventoToPdf(evt)}
+                              className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-rose-700 text-xs font-medium transition-all flex items-center gap-1 cursor-pointer"
+                              title="Exportar a PDF"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              <span>PDF</span>
+                            </button>
+                          </>
+                        ) : (
+                          <div
+                            className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 text-[11px] font-medium flex items-center gap-1"
+                            title="Exportación e impresión reservada exclusivamente para el Administrador"
+                          >
+                            <Lock className="w-3 h-3 text-slate-400" />
+                            <span>Exportar: Solo Admin</span>
+                          </div>
+                        )}
+
+                        {/* WhatsApp con Link Personalizado para el Coordinador */}
                         <button
-                          onClick={() => setOfficialSheetEvento(evt)}
-                          className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                          onClick={() => handleShareLinkWhatsApp(evt)}
+                          className="px-2.5 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer"
+                          title="Enviar WhatsApp con enlace del evento al coordinador para recabar firmas"
                         >
-                          <Printer className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Formato 1:1</span>
+                          <Share2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>WhatsApp</span>
                         </button>
 
-                        {/* Excel */}
+                        {/* Copiar Enlace de Firmas */}
                         <button
-                          onClick={() => exportEventoToExcel(evt)}
-                          className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-emerald-700 text-xs font-medium transition-all flex items-center gap-1 cursor-pointer"
-                          title="Exportar a Excel"
+                          onClick={() => handleCopySignatureLink(evt)}
+                          className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer"
+                          title="Copiar enlace personalizado de firmas"
                         >
-                          <FileSpreadsheet className="w-3.5 h-3.5" />
-                          <span>Excel</span>
+                          <Copy className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Link</span>
                         </button>
 
-                        {/* PDF */}
+                        {/* Modo Firmas Táctil para Tablet / Móvil */}
                         <button
-                          onClick={() => exportEventoToPdf(evt)}
-                          className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-rose-700 text-xs font-medium transition-all flex items-center gap-1 cursor-pointer"
-                          title="Exportar a PDF"
+                          onClick={() => setViewingFirmaEvento(evt)}
+                          className="px-2.5 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-800 text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer"
+                          title="Abrir vista de recolección de firmas táctil para este evento"
                         >
-                          <FileText className="w-3.5 h-3.5" />
-                          <span>PDF</span>
+                          <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Firmas</span>
                         </button>
 
                         {/* Editar */}
@@ -1241,6 +1365,58 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
               </div>
             </div>
 
+            {/* Coordinador Asignado para Recabar Firmas */}
+            <div className="bg-gradient-to-br from-emerald-50/70 to-teal-50/50 rounded-2xl p-5 border border-emerald-200 space-y-4">
+              <div className="flex items-center gap-2 border-b border-emerald-100 pb-3">
+                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                  <Smartphone className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-emerald-950 uppercase tracking-wider">
+                    Coordinador de Campo / Responsable de Recabar Firmas (Opcional)
+                  </h3>
+                  <p className="text-[11px] text-emerald-800 mt-0.5">
+                    Registra al coordinador (nombre, puesto y WhatsApp) para enviarle el enlace oficial y recabar las firmas digitales de los participantes en su celular o tablet.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700">Nombre del Coordinador</label>
+                  <input
+                    type="text"
+                    value={coordinadorNombre}
+                    onChange={(e) => setCoordinadorNombre(e.target.value)}
+                    placeholder="Ej. Ing. Carlos Mendoza"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700">Puesto o Cargo</label>
+                  <input
+                    type="text"
+                    value={coordinadorPuesto}
+                    onChange={(e) => setCoordinadorPuesto(e.target.value)}
+                    placeholder="Ej. Coordinador de Capacitación"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700">WhatsApp (10 dígitos)</label>
+                  <input
+                    type="tel"
+                    value={coordinadorWhatsApp}
+                    onChange={(e) => setCoordinadorWhatsApp(e.target.value)}
+                    placeholder="Ej. 8711234567"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Firma RH */}
             <div className="space-y-2 pt-2">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
@@ -1368,35 +1544,117 @@ export const EventosModule: React.FC<EventosModuleProps> = ({
                 )}
               </div>
 
+              {/* Coordinador Asignado y Enlace WhatsApp */}
+              <div className="bg-gradient-to-br from-emerald-50/70 to-teal-50/50 rounded-2xl p-4 border border-emerald-200 space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
+                      <Smartphone className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider block">
+                        Coordinador de Campo / Recolección de Firmas
+                      </span>
+                      <p className="font-bold text-emerald-950 text-xs">
+                        {selectedEvento.coordinadorNombre || 'Sin coordinador asignado'}
+                        {selectedEvento.coordinadorPuesto && ` • ${selectedEvento.coordinadorPuesto}`}
+                      </p>
+                    </div>
+                  </div>
+                  {selectedEvento.coordinadorWhatsApp && (
+                    <span className="px-2.5 py-1 rounded-lg bg-white border border-emerald-200 text-emerald-800 text-xs font-mono font-bold">
+                      WA: {selectedEvento.coordinadorWhatsApp}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 pt-1 flex-wrap">
+                  <button
+                    onClick={() => handleShareLinkWhatsApp(selectedEvento)}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>Enviar WhatsApp</span>
+                  </button>
+                  <button
+                    onClick={() => handleCopySignatureLink(selectedEvento)}
+                    className="px-3 py-1.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copiar Enlace</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const evt = selectedEvento;
+                      setSelectedEvento(null);
+                      setViewingFirmaEvento(evt);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>Recabar Firmas Táctil</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Action Buttons inside Modal */}
-              <div className="flex items-center gap-2 pt-2">
-                <button
-                  onClick={() => {
-                    const evt = selectedEvento;
-                    setSelectedEvento(null);
-                    setOfficialSheetEvento(evt);
-                  }}
-                  className="px-4 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs flex items-center gap-1.5"
-                >
-                  <Printer className="w-4 h-4 text-amber-400" />
-                  <span>Hoja Oficial 1:1</span>
-                </button>
-                <button
-                  onClick={() => exportEventoToPdf(selectedEvento)}
-                  className="px-4 py-2 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 font-bold text-xs flex items-center gap-1.5"
-                >
-                  <FileText className="w-4 h-4" /> PDF
-                </button>
-                <button
-                  onClick={() => exportEventoToExcel(selectedEvento)}
-                  className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-xs flex items-center gap-1.5"
-                >
-                  <FileSpreadsheet className="w-4 h-4" /> Excel
-                </button>
+              <div className="flex items-center gap-2 pt-2 flex-wrap">
+                {isAdmin ? (
+                  <>
+                    <button
+                      onClick={() => {
+                        const evt = selectedEvento;
+                        setSelectedEvento(null);
+                        setOfficialSheetEvento(evt);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Printer className="w-4 h-4 text-amber-400" />
+                      <span>Hoja Oficial 1:1</span>
+                    </button>
+                    <button
+                      onClick={() => exportEventoToPdf(selectedEvento)}
+                      className="px-4 py-2 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <FileText className="w-4 h-4" /> PDF
+                    </button>
+                    <button
+                      onClick={() => exportEventoToExcel(selectedEvento)}
+                      className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" /> Excel
+                    </button>
+                  </>
+                ) : (
+                  <div className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-500 text-xs font-semibold flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Impresión y Exportación restringidas al Administrador</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* ================= TOAST: ENLACE COPIADO ================= */}
+      {copiedLinkNotice && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 text-xs font-bold flex items-center gap-2 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span>{copiedLinkNotice}</span>
+        </div>
+      )}
+
+      {/* ================= MODAL: FIRMA TÁCTIL DEL COORDINADOR ================= */}
+      {viewingFirmaEvento && (
+        <FirmaCoordinadorView
+          evento={viewingFirmaEvento}
+          onUpdateEvento={(updated) => {
+            onUpdateEvento(updated);
+            setViewingFirmaEvento(updated);
+          }}
+          onClose={() => setViewingFirmaEvento(null)}
+        />
       )}
 
       {/* ================= MODAL: HOJA OFICIAL 1:1 ================= */}

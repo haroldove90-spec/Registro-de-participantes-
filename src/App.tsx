@@ -24,11 +24,28 @@ import { MetricasModule } from './components/Modules/MetricasModule';
 import { PerfilModule } from './components/Modules/PerfilModule';
 import { CoordinadoresModule } from './components/Modules/CoordinadoresModule';
 import { LoginScreen } from './components/Auth/LoginScreen';
+import { FloatingNotificationModal } from './components/Notifications/FloatingNotificationModal';
+import { FirmaCoordinadorView } from './components/Modules/FirmaCoordinadorView';
 
 export default function App() {
   const [activeModule, setActiveModule] = useState<ModuleType>('eventos');
   const [eventos, setEventos] = useState<EventoData[]>([]);
   const [selectedEventoIdParaInscripcion, setSelectedEventoIdParaInscripcion] = useState<string | null>(null);
+
+  // Support direct standalone access for coordinators opening the signature link from WhatsApp
+  const [standaloneFirmaEventoId, setStandaloneFirmaEventoId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get('modulo') === 'firmas' && searchParams.get('eventoId')) {
+        return searchParams.get('eventoId');
+      }
+      if (window.location.hash.includes('firmas')) {
+        const match = window.location.hash.match(/eventoId=([^&]+)/);
+        if (match && match[1]) return decodeURIComponent(match[1]);
+      }
+    }
+    return null;
+  });
 
   // Session state: check if valid user session is stored in localStorage
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -140,6 +157,29 @@ export default function App() {
     setIsAuthenticated(false);
   };
 
+  // IF OPENED VIA WHATSAPP SIGNATURE LINK (Mobile/Tablet Coordinator Mode)
+  const standaloneEvento = eventos.find((e) => e.id === standaloneFirmaEventoId);
+  if (standaloneFirmaEventoId) {
+    if (standaloneEvento) {
+      return (
+        <div className="min-h-screen bg-slate-900">
+          <FirmaCoordinadorView
+            evento={standaloneEvento}
+            onUpdateEvento={(updated) => {
+              handleUpdateEvento(updated);
+            }}
+            onClose={() => {
+              setStandaloneFirmaEventoId(null);
+              if (typeof window !== 'undefined') {
+                window.history.replaceState({}, document.title, window.location.pathname);
+              }
+            }}
+          />
+        </div>
+      );
+    }
+  }
+
   // IF NOT AUTHENTICATED: Display Login / Credentials Access Home Screen
   if (!isAuthenticated) {
     return (
@@ -230,6 +270,9 @@ export default function App() {
                 };
                 handleUpdateEvento(updatedEvt);
               }}
+              onUpdateEvento={(updatedEvt) => {
+                handleUpdateEvento(updatedEvt);
+              }}
             />
           )}
 
@@ -254,6 +297,15 @@ export default function App() {
         activeModule={activeModule}
         setActiveModule={setActiveModule}
         totalEventosCount={eventos.length}
+      />
+
+      {/* Floating System Notifications with Sound */}
+      <FloatingNotificationModal
+        userProfile={userProfile}
+        onNavigateToEvento={(eventoId) => {
+          setSelectedEventoIdParaInscripcion(eventoId);
+          setActiveModule('participantes');
+        }}
       />
     </div>
   );

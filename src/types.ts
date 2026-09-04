@@ -72,13 +72,20 @@ export interface EventoData {
   // 5. Lista de Asistencia / Colegas Participantes
   participantes: Participant[];
 
+  // 6. Coordinador Responsable en Campo (para recolección de firmas vía WhatsApp)
+  coordinadorNombre?: string;
+  coordinadorPuesto?: string;
+  coordinadorWhatsApp?: string;
+  registradoPor?: 'Admin' | 'Supervisor';
+  registradoPorNombre?: string;
+
   // Meta
   fechaCreacion: string;
   estado: 'Registrado' | 'En Proceso' | 'Completado' | 'Desactivado';
   activo?: boolean; // True por defecto; controlado por Admin para pausar/desactivar
 }
 
-export type UserRole = 'Admin' | 'Coordinadores';
+export type UserRole = 'Admin' | 'Supervisor' | 'Supervisores' | 'Coordinadores';
 
 export interface UserCredential {
   id: string;
@@ -123,8 +130,22 @@ export type ModuleType =
   | 'eventos'
   | 'participantes'
   | 'metricas'
+  | 'supervisores'
   | 'coordinadores'
   | 'perfil'
   | 'registro'
-  | 'historial';
+  | 'historial'
+  | 'firmas';
+
+export interface SystemNotification {
+  id: string;
+  titulo: string;
+  mensaje: string;
+  tipo: 'evento_admin' | 'evento_supervisor' | 'firmas_completadas' | 'info';
+  eventoId?: string;
+  eventoNombre?: string;
+  timestamp: string;
+  destinatarioRol?: 'Admin' | 'Supervisor' | 'Todos';
+  leido?: boolean;
+}
 

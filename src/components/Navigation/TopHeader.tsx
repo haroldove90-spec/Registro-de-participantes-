@@ -19,8 +19,8 @@ interface TopHeaderProps {
 }
 
 const AVAILABLE_ROLES: { role: UserRole; label: string }[] = [
-  { role: 'Admin', label: 'Admin (Control Total)' },
-  { role: 'Coordinadores', label: 'Coordinadores (Registro)' },
+  { role: 'Admin', label: 'Admin (Control Total e Impresión)' },
+  { role: 'Supervisor', label: 'Supervisor (Eventos y Participantes)' },
 ];
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -40,7 +40,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     userProfile.rol === 'Admin' ||
     userProfile.rol.toLowerCase().includes('admin');
 
-  const effectiveRole: UserRole = userProfile.rol.toLowerCase().includes('admin') ? 'Admin' : 'Coordinadores';
+  const effectiveRole: UserRole = userProfile.rol.toLowerCase().includes('admin') ? 'Admin' : 'Supervisor';
 
   const getModuleTitle = () => {
     switch (activeModule) {
@@ -61,10 +61,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           title: 'Módulo de Métricas e Indicadores',
           subtitle: 'Análisis estadístico, horas-hombre, costos y distribución de capacitación',
         };
+      case 'supervisores':
       case 'coordinadores':
         return {
-          title: 'Registro de Coordinadores',
-          subtitle: 'Alta de cuentas, asignación de roles y distribución de credenciales por WhatsApp',
+          title: 'Registro de Supervisores',
+          subtitle: 'Alta de cuentas de supervisores, asignación de roles y distribución de credenciales por WhatsApp',
         };
       case 'perfil':
         return {

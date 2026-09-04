@@ -30,12 +30,12 @@ const AVAILABLE_ROLES: { role: UserRole; label: string; desc: string }[] = [
   {
     role: 'Admin',
     label: 'Admin',
-    desc: 'Control total, edición, borrado y desactivación de registros',
+    desc: 'Control total, edición, borrado, exportaciones oficiales e impresión',
   },
   {
-    role: 'Coordinadores',
-    label: 'Coordinadores',
-    desc: 'Registro de participantes y captura operativa',
+    role: 'Supervisor',
+    label: 'Supervisor',
+    desc: 'Registro de eventos y participantes con alertas sonoras en vivo',
   },
 ];
 
@@ -57,7 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     userProfile.rol.toLowerCase().includes('admin');
 
   // Currently simulated / active operating role
-  const effectiveRole: UserRole = userProfile.rol.toLowerCase().includes('admin') ? 'Admin' : 'Coordinadores';
+  const effectiveRole: UserRole = userProfile.rol.toLowerCase().includes('admin') ? 'Admin' : 'Supervisor';
   const isOperatingAsAdmin = effectiveRole === 'Admin';
 
   const allNavItems = [
@@ -93,9 +93,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'coordinadores' as ModuleType,
-      label: 'Registro de Coordinadores',
-      shortLabel: 'Coordinadores',
-      description: 'Gestión de cuentas y accesos por WhatsApp',
+      label: 'Registro de Supervisores',
+      shortLabel: 'Supervisores',
+      description: 'Gestión de cuentas y accesos de supervisores',
       icon: Users,
       badge: 'Admin',
       badgeColor: 'bg-emerald-100 text-emerald-800',
@@ -158,7 +158,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-bold text-white truncate group-hover:text-blue-300 transition-colors">
-                    {effectiveRole} {effectiveRole === 'Coordinadores' ? '(Vista Coordinador)' : '(Control Total)'}
+                    {effectiveRole} {effectiveRole === 'Supervisor' ? '(Vista Supervisor)' : '(Control Total)'}
                   </p>
                   <p className="text-[9px] text-slate-400">Clic para cambiar de rol</p>
                 </div>
