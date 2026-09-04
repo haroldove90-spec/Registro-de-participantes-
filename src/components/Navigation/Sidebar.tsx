@@ -13,6 +13,8 @@ import {
   ChevronDown,
   Layers,
   Users,
+  CalendarDays,
+  UserCheck,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -60,23 +62,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const allNavItems = [
     {
-      id: 'registro' as ModuleType,
-      label: 'Registro de Participantes',
-      shortLabel: 'Registro',
-      description: 'Formulario de eventos y participantes',
-      icon: ClipboardList,
-      badge: 'Principal',
+      id: 'eventos' as ModuleType,
+      label: 'Módulo Eventos',
+      shortLabel: 'Eventos',
+      description: 'Alta, edición, catálogo, suspensión y exportación',
+      icon: CalendarDays,
+      count: totalEventosCount,
       badgeColor: 'bg-blue-100 text-blue-700',
       roles: ['all'],
     },
     {
-      id: 'historial' as ModuleType,
-      label: 'Historial de Participantes',
-      shortLabel: 'Historial',
-      description: 'Consultas y exportaciones en Excel/PDF',
-      icon: History,
-      count: totalEventosCount,
-      badgeColor: 'bg-slate-100 text-slate-700',
+      id: 'participantes' as ModuleType,
+      label: 'Registro de Participantes',
+      shortLabel: 'Participantes',
+      description: 'Selecciona evento y registra participantes',
+      icon: UserCheck,
+      badge: 'Asistencia',
+      badgeColor: 'bg-emerald-100 text-emerald-800',
       roles: ['all'],
     },
     {
@@ -226,7 +228,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeModule === item.id;
+          const isActive =
+            activeModule === item.id ||
+            (item.id === 'eventos' && (activeModule as string) === 'historial') ||
+            (item.id === 'participantes' && (activeModule as string) === 'registro');
 
           return (
             <button

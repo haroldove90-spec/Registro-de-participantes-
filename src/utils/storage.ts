@@ -1,4 +1,4 @@
-import { EventoData, UserProfile, AuthSession, UserRole } from '../types';
+import { EventoData, UserProfile, AuthSession, UserRole, Participant } from '../types';
 import { INITIAL_EVENTOS, INITIAL_USER_PROFILE } from '../data/mockData';
 import {
   fetchEventosFromSupabase,
@@ -80,6 +80,79 @@ export function updateEvento(eventoActualizado: EventoData): EventoData[] {
   upsertEventoToSupabase(eventoActualizado).catch((err) =>
     console.warn('Supabase sync background notice:', err)
   );
+  return actualizados;
+}
+
+/**
+ * Adds a new participant to a specific event and recalculates all metrics.
+ */
+export function addParticipantToEvento(eventoId: string, participant: Participant): EventoData[] {
+  const actuales = getStoredEventos();
+  let updatedEvento: EventoData | null = null;
+
+  const actualizados = actuales.map((evt) => {
+    if (evt.id !== eventoId) return evt;
+
+    const list = [...evt.participantes, participant];
+    const hombres = list.filter((p) => p.genero === 'H').length;
+    const mujeres = list.filter((p) => p.genero === 'M').length;
+    const total = list.length;
+    const horas = evt.horasCapacitacion || 0;
+
+    updatedEvento = {
+      ...evt,
+      participantes: list,
+      totalParticipantes: total,
+      hombresCount: hombres,
+      mujeresCount: mujeres,
+      horasHombreCapacitacion: total * horas,
+    };
+    return updatedEvento;
+  });
+
+  saveStoredEventos(actualizados);
+  if (updatedEvento) {
+    upsertEventoToSupabase(updatedEvento).catch((err) =>
+      console.warn('Supabase sync notice upon adding participant:', err)
+    );
+  }
+  return actualizados;
+}
+
+/**
+ * Removes a participant from a specific event and recalculates metrics.
+ */
+export function removeParticipantFromEvento(eventoId: string, participantId: string): EventoData[] {
+  const actuales = getStoredEventos();
+  let updatedEvento: EventoData | null = null;
+
+  const actualizados = actuales.map((evt) => {
+    if (evt.id !== eventoId) return evt;
+
+    const list = evt.participantes.filter((p) => p.id !== participantId);
+    const reorderedList = list.map((p, idx) => ({ ...p, pos: idx + 1 }));
+    const hombres = reorderedList.filter((p) => p.genero === 'H').length;
+    const mujeres = reorderedList.filter((p) => p.genero === 'M').length;
+    const total = reorderedList.length;
+    const horas = evt.horasCapacitacion || 0;
+
+    updatedEvento = {
+      ...evt,
+      participantes: reorderedList,
+      totalParticipantes: total,
+      hombresCount: hombres,
+      mujeresCount: mujeres,
+      horasHombreCapacitacion: total * horas,
+    };
+    return updatedEvento;
+  });
+
+  saveStoredEventos(actualizados);
+  if (updatedEvento) {
+    upsertEventoToSupabase(updatedEvento).catch((err) =>
+      console.warn('Supabase sync notice upon removing participant:', err)
+    );
+  }
   return actualizados;
 }
 

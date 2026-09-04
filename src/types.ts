@@ -119,5 +119,12 @@ export interface AuthSession {
   lastLogin: string;
 }
 
-export type ModuleType = 'metricas' | 'registro' | 'historial' | 'perfil' | 'coordinadores';
+export type ModuleType =
+  | 'eventos'
+  | 'participantes'
+  | 'metricas'
+  | 'coordinadores'
+  | 'perfil'
+  | 'registro'
+  | 'historial';
 

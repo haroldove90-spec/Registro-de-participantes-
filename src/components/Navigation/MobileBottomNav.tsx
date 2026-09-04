@@ -1,6 +1,6 @@
 import React from 'react';
 import { ModuleType } from '../../types';
-import { ClipboardList, History, BarChart3, User } from 'lucide-react';
+import { CalendarDays, UserCheck, BarChart3, User } from 'lucide-react';
 
 interface MobileBottomNavProps {
   activeModule: ModuleType;
@@ -15,20 +15,20 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 }) => {
   const navItems = [
     {
+      id: 'eventos' as ModuleType,
+      label: 'Eventos',
+      icon: CalendarDays,
+      count: totalEventosCount,
+    },
+    {
+      id: 'participantes' as ModuleType,
+      label: 'Participantes',
+      icon: UserCheck,
+    },
+    {
       id: 'metricas' as ModuleType,
       label: 'Métricas',
       icon: BarChart3,
-    },
-    {
-      id: 'registro' as ModuleType,
-      label: 'Registro',
-      icon: ClipboardList,
-    },
-    {
-      id: 'historial' as ModuleType,
-      label: 'Historial',
-      icon: History,
-      count: totalEventosCount,
     },
     {
       id: 'perfil' as ModuleType,
@@ -42,13 +42,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       <div className="flex items-center justify-around max-w-md mx-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeModule === item.id;
+          const isActive =
+            activeModule === item.id ||
+            (item.id === 'eventos' && (activeModule as string) === 'historial') ||
+            (item.id === 'participantes' && (activeModule as string) === 'registro');
 
           return (
             <button
               key={item.id}
               onClick={() => setActiveModule(item.id)}
-              className={`flex flex-col items-center justify-center py-1.5 px-4 rounded-xl transition-all relative ${
+              className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all relative cursor-pointer ${
                 isActive
                   ? 'text-blue-400 font-semibold'
                   : 'text-slate-400 hover:text-slate-200'

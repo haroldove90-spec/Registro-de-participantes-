@@ -44,15 +44,17 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
   const getModuleTitle = () => {
     switch (activeModule) {
+      case 'eventos':
+      case 'historial':
+        return {
+          title: 'Módulo de Eventos',
+          subtitle: 'Alta, edición, catálogo, suspensión y exportaciones oficiales de eventos de capacitación',
+        };
+      case 'participantes':
       case 'registro':
         return {
           title: 'Registro de Participantes',
-          subtitle: 'Formulario electrónico de control de capacitaciones y listas de asistencia con firmas digitales',
-        };
-      case 'historial':
-        return {
-          title: 'Historial de Participantes',
-          subtitle: 'Consulta de eventos registrados, asistencias y exportaciones en Excel/PDF',
+          subtitle: 'Selecciona un evento y registra asistentes con firma digital en cualquier momento',
         };
       case 'metricas':
         return {
@@ -68,6 +70,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         return {
           title: 'Perfil de Usuario y Permisos',
           subtitle: 'Gestión de datos personales, roles, credenciales y preferencias',
+        };
+      default:
+        return {
+          title: 'Módulo de Eventos',
+          subtitle: 'Sistema Oficial de Capacitación y Registro de Asistencias',
         };
     }
   };

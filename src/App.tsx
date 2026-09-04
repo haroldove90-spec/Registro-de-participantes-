@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { ModuleType, EventoData, UserProfile, AuthSession, UserRole } from './types';
+import { ModuleType, EventoData, UserProfile, AuthSession, UserRole, Participant } from './types';
 import {
   getStoredEventos,
   addEvento,
   updateEvento,
   deleteEvento,
+  addParticipantToEvento,
+  removeParticipantFromEvento,
   getStoredUserProfile,
   saveStoredUserProfile,
   getStoredAuthSession,
@@ -16,16 +18,17 @@ import { signOutFromSupabase, getCurrentSupabaseUser, saveUserProfileToSupabase 
 import { Sidebar } from './components/Navigation/Sidebar';
 import { MobileBottomNav } from './components/Navigation/MobileBottomNav';
 import { TopHeader } from './components/Navigation/TopHeader';
-import { RegistroModule } from './components/Modules/RegistroModule';
-import { HistorialModule } from './components/Modules/HistorialModule';
+import { EventosModule } from './components/Modules/EventosModule';
+import { ParticipantesModule } from './components/Modules/ParticipantesModule';
 import { MetricasModule } from './components/Modules/MetricasModule';
 import { PerfilModule } from './components/Modules/PerfilModule';
 import { CoordinadoresModule } from './components/Modules/CoordinadoresModule';
 import { LoginScreen } from './components/Auth/LoginScreen';
 
 export default function App() {
-  const [activeModule, setActiveModule] = useState<ModuleType>('registro');
+  const [activeModule, setActiveModule] = useState<ModuleType>('eventos');
   const [eventos, setEventos] = useState<EventoData[]>([]);
+  const [selectedEventoIdParaInscripcion, setSelectedEventoIdParaInscripcion] = useState<string | null>(null);
 
   // Session state: check if valid user session is stored in localStorage
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -179,21 +182,54 @@ export default function App() {
 
         {/* Dynamic Module Body */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 mb-16 md:mb-0">
-          {activeModule === 'registro' && (
-            <RegistroModule
+          {(activeModule === 'eventos' || activeModule === 'historial') && (
+            <EventosModule
+              eventos={eventos}
+              userProfile={userProfile}
               onSaveEvento={(nuevoEvento) => {
                 handleSaveNuevoEvento(nuevoEvento);
+              }}
+              onUpdateEvento={(eventoActualizado) => {
+                handleUpdateEvento(eventoActualizado);
+              }}
+              onDeleteEvento={(id) => {
+                handleDeleteEvento(id);
+              }}
+              onSelectEventoParaInscripcion={(eventoId) => {
+                setSelectedEventoIdParaInscripcion(eventoId);
+                setActiveModule('participantes');
               }}
             />
           )}
 
-          {activeModule === 'historial' && (
-            <HistorialModule
+          {(activeModule === 'participantes' || activeModule === 'registro') && (
+            <ParticipantesModule
               eventos={eventos}
               userProfile={userProfile}
-              onDeleteEvento={handleDeleteEvento}
-              onUpdateEvento={handleUpdateEvento}
-              onSyncEventos={(synced) => setEventos(synced)}
+              selectedEventoId={selectedEventoIdParaInscripcion}
+              onSelectEvento={(id) => {
+                setSelectedEventoIdParaInscripcion(id);
+              }}
+              onAddParticipant={(eventoId, participant) => {
+                const updated = addParticipantToEvento(eventoId, participant);
+                setEventos(updated);
+              }}
+              onRemoveParticipant={(eventoId, participantId) => {
+                const updated = removeParticipantFromEvento(eventoId, participantId);
+                setEventos(updated);
+              }}
+              onUpdateParticipant={(eventoId, participant) => {
+                const evt = eventos.find((e) => e.id === eventoId);
+                if (!evt) return;
+                const list = evt.participantes.map((p) =>
+                  p.id === participant.id ? participant : p
+                );
+                const updatedEvt: EventoData = {
+                  ...evt,
+                  participantes: list,
+                };
+                handleUpdateEvento(updatedEvt);
+              }}
             />
           )}
 
@@ -206,7 +242,7 @@ export default function App() {
               userProfile={userProfile}
               eventos={eventos}
               onSaveProfile={handleSaveProfile}
-              onNavigateToHistorial={() => setActiveModule('historial')}
+              onNavigateToHistorial={() => setActiveModule('eventos')}
               onLogout={handleLogout}
             />
           )}
