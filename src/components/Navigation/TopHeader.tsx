@@ -19,13 +19,8 @@ interface TopHeaderProps {
 }
 
 const AVAILABLE_ROLES: { role: UserRole; label: string }[] = [
-  { role: 'Administrador de Capacitación', label: 'Administrador' },
-  { role: 'Coordinadores', label: 'Coordinadores' },
-  { role: 'Coordinador de Capacitación', label: 'Coordinador de Capacitación' },
-  { role: 'Instructor / Capacitador', label: 'Instructor' },
-  { role: 'Recursos Humanos (RH)', label: 'Recursos Humanos' },
-  { role: 'Participante / Empleado', label: 'Participante / Empleado' },
-  { role: 'Auditor / Consulta', label: 'Auditor' },
+  { role: 'Admin', label: 'Admin (Control Total)' },
+  { role: 'Coordinadores', label: 'Coordinadores (Registro)' },
 ];
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -39,11 +34,13 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 }) => {
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
 
-  const isAdmin =
-    userProfile.rol === 'Administrador de Capacitación' ||
-    userProfile.rol.toLowerCase().includes('admin') ||
+  const isAccountAdmin =
     userProfile.email.toLowerCase() === 'haroldo90@hotmail.com' ||
-    userProfile.usuario === 'haroldo90';
+    userProfile.usuario === 'haroldo90' ||
+    userProfile.rol === 'Admin' ||
+    userProfile.rol.toLowerCase().includes('admin');
+
+  const effectiveRole: UserRole = userProfile.rol.toLowerCase().includes('admin') ? 'Admin' : 'Coordinadores';
 
   const getModuleTitle = () => {
     switch (activeModule) {
@@ -121,18 +118,18 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           />
 
           {/* Admin Role Navigation Switcher (Visible ONLY for Admin) */}
-          {isAdmin && (
+          {isAccountAdmin && (
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowRoleDropdown(!showRoleDropdown)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-800 text-xs font-bold transition-all shadow-2xs cursor-pointer"
-                title="Cambiar rol para navegar como otro tipo de usuario"
+                title="Cambiar rol para navegar como Admin o Coordinador"
               >
                 <Layers className="w-3.5 h-3.5 text-purple-600" />
                 <span className="hidden md:inline">Vista de Rol:</span>
                 <span className="bg-purple-200 text-purple-900 px-2 py-0.5 rounded-md font-mono text-[11px] truncate max-w-[130px]">
-                  {userProfile.rol.split(' / ')[0]}
+                  {effectiveRole}
                 </span>
                 <ChevronDown
                   className={`w-3.5 h-3.5 text-purple-600 transition-transform ${
@@ -145,12 +142,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
                   <div className="px-3.5 py-1.5 border-b border-slate-100">
                     <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                      Navegar en Sistema como:
+                      Seleccionar Rol Activo:
                     </p>
                   </div>
                   <div className="p-1 space-y-0.5">
                     {AVAILABLE_ROLES.map((r) => {
-                      const isCurrent = userProfile.rol === r.role;
+                      const isCurrent = effectiveRole === r.role;
                       return (
                         <button
                           key={r.role}

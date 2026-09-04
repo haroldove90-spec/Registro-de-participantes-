@@ -33,34 +33,14 @@ interface AuthModalProps {
 
 const AVAILABLE_ROLES: { value: UserRole; label: string; desc: string }[] = [
   {
-    value: 'Administrador de Capacitación',
-    label: 'Administrador de Capacitación',
-    desc: 'Acceso total a configuración, roles, métricas y reportes',
+    value: 'Admin',
+    label: 'Admin (Administrador)',
+    desc: 'Acceso total a configuración, cambio de roles, edición, desactivación y borrado de registros',
   },
   {
-    value: 'Coordinador de Capacitación',
-    label: 'Coordinador de Capacitación',
-    desc: 'Creación de eventos, control de presupuestos y gestión de asistencia',
-  },
-  {
-    value: 'Instructor / Capacitador',
-    label: 'Instructor / Capacitador',
-    desc: 'Registro de asistencias, firma de cursos y contenidos temáticos',
-  },
-  {
-    value: 'Recursos Humanos (RH)',
-    label: 'Recursos Humanos (RH)',
-    desc: 'Revisión y aprobación de listas de asistencia y firmas oficiales',
-  },
-  {
-    value: 'Participante / Empleado',
-    label: 'Participante / Empleado',
-    desc: 'Consulta de capacitaciones y firma de listas de asistencia',
-  },
-  {
-    value: 'Auditor / Consulta',
-    label: 'Auditor / Consulta',
-    desc: 'Consulta de métricas, historial y descargas en PDF/Excel',
+    value: 'Coordinadores',
+    label: 'Coordinadores',
+    desc: 'Registro de participantes, consulta de capacitaciones, firmas y descargas',
   },
 ];
 
@@ -89,7 +69,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [regDepartamento, setRegDepartamento] = useState('');
   const [regRfc, setRegRfc] = useState('');
   const [regTelefono, setRegTelefono] = useState('');
-  const [regRol, setRegRol] = useState<UserRole>('Coordinador de Capacitación');
+  const [regRol, setRegRol] = useState<UserRole>('Coordinadores');
   const [showRegPass, setShowRegPass] = useState(false);
   const [regLoading, setRegLoading] = useState(false);
   const [regError, setRegError] = useState('');

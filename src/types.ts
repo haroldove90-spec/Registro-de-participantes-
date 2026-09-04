@@ -74,17 +74,11 @@ export interface EventoData {
 
   // Meta
   fechaCreacion: string;
-  estado: 'Registrado' | 'En Proceso' | 'Completado';
+  estado: 'Registrado' | 'En Proceso' | 'Completado' | 'Desactivado';
+  activo?: boolean; // True por defecto; controlado por Admin para pausar/desactivar
 }
 
-export type UserRole =
-  | 'Administrador de Capacitación'
-  | 'Coordinadores'
-  | 'Coordinador de Capacitación'
-  | 'Instructor / Capacitador'
-  | 'Recursos Humanos (RH)'
-  | 'Participante / Empleado'
-  | 'Auditor / Consulta';
+export type UserRole = 'Admin' | 'Coordinadores';
 
 export interface UserCredential {
   id: string;

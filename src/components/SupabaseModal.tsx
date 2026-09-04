@@ -33,13 +33,8 @@ interface SupabaseModalProps {
 }
 
 const ROLES_LIST: UserRole[] = [
-  'Administrador de Capacitación',
+  'Admin',
   'Coordinadores',
-  'Coordinador de Capacitación',
-  'Instructor / Capacitador',
-  'Recursos Humanos (RH)',
-  'Participante / Empleado',
-  'Auditor / Consulta',
 ];
 
 export const SupabaseModal: React.FC<SupabaseModalProps> = ({
@@ -61,11 +56,9 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
 
   // Role Generator State
   const [targetEmail, setTargetEmail] = useState(
-    'registrodeparticipantes@appdesignsoftware.com'
+    'haroldo90@hotmail.com'
   );
-  const [selectedRole, setSelectedRole] = useState<UserRole>(
-    'Administrador de Capacitación'
-  );
+  const [selectedRole, setSelectedRole] = useState<UserRole>('Admin');
   const [roleUpdateMsg, setRoleUpdateMsg] = useState<{
     success?: boolean;
     text?: string;
@@ -134,7 +127,8 @@ CREATE TABLE public.eventos (
     aprobado_rh BOOLEAN NOT NULL DEFAULT false,
     
     -- Estado y Metadatos
-    estado TEXT NOT NULL DEFAULT 'Registrado' CHECK (estado IN ('Registrado', 'En Proceso', 'Completado')),
+    estado TEXT NOT NULL DEFAULT 'Registrado' CHECK (estado IN ('Registrado', 'En Proceso', 'Completado', 'Desactivado')),
+    activo BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
@@ -156,7 +150,7 @@ CREATE TABLE IF NOT EXISTS public.participantes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 4. TABLA DE PERFILES DE USUARIO, FOTOGRAFÍA Y ROLES
+-- 4. TABLA DE PERFILES DE USUARIO, FOTOGRAFÍA Y ROLES (ESTRICTAMENTE 2 ROLES: Admin y Coordinadores)
 CREATE TABLE IF NOT EXISTS public.perfiles_usuario (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     user_id UUID,
@@ -166,14 +160,10 @@ CREATE TABLE IF NOT EXISTS public.perfiles_usuario (
     departamento TEXT DEFAULT '',
     rfc TEXT DEFAULT '',
     telefono TEXT DEFAULT '',
-    rol TEXT NOT NULL DEFAULT 'Participante / Empleado' CHECK (
+    rol TEXT NOT NULL DEFAULT 'Coordinadores' CHECK (
         rol IN (
-            'Administrador de Capacitación',
-            'Coordinador de Capacitación',
-            'Instructor / Capacitador',
-            'Recursos Humanos (RH)',
-            'Participante / Empleado',
-            'Auditor / Consulta'
+            'Admin',
+            'Coordinadores'
         )
     ),
     avatar_url TEXT DEFAULT '',
@@ -256,7 +246,7 @@ BEGIN
         COALESCE(NEW.raw_user_meta_data->>'departamento', 'General'),
         COALESCE(NEW.raw_user_meta_data->>'rfc', 'XAXX010101000'),
         COALESCE(NEW.raw_user_meta_data->>'telefono', ''),
-        COALESCE(NEW.raw_user_meta_data->>'rol', 'Coordinador de Capacitación'),
+        COALESCE(NEW.raw_user_meta_data->>'rol', 'Coordinadores'),
         COALESCE(NEW.raw_user_meta_data->>'avatar_url', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80'),
         CURRENT_DATE
     )
@@ -310,13 +300,13 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 INSERT INTO public.perfiles_usuario (id, nombre, email, puesto, departamento, rfc, telefono, rol, avatar_url)
 VALUES (
     'admin_default',
-    'Harold Ove',
-    'haroldove90@gmail.com',
-    'Administrador de Capacitación y Desarrollo',
-    'Recursos Humanos / Formación',
-    'XAXX010101000',
-    '+52 (55) 1234-5678',
-    'Administrador de Capacitación',
+    'Harold Anguiano Morales',
+    'haroldo90@hotmail.com',
+    'Administrador General del Sistema',
+    'Dirección General / Capacitación',
+    'AUMH900101XYZ',
+    '+52 55 1234 5678',
+    'Admin',
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'
 )
 ON CONFLICT (email) DO UPDATE SET

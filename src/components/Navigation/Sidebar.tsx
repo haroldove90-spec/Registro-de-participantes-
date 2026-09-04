@@ -26,39 +26,14 @@ interface SidebarProps {
 
 const AVAILABLE_ROLES: { role: UserRole; label: string; desc: string }[] = [
   {
-    role: 'Administrador de Capacitación',
-    label: 'Administrador',
-    desc: 'Acceso total y configuración',
+    role: 'Admin',
+    label: 'Admin',
+    desc: 'Control total, edición, borrado y desactivación de registros',
   },
   {
     role: 'Coordinadores',
     label: 'Coordinadores',
-    desc: 'Registro de participantes y gestión operativa',
-  },
-  {
-    role: 'Coordinador de Capacitación',
-    label: 'Coordinador de Capacitación',
-    desc: 'Registro y gestión de eventos',
-  },
-  {
-    role: 'Instructor / Capacitador',
-    label: 'Instructor',
-    desc: 'Cursos asignados y firmas',
-  },
-  {
-    role: 'Recursos Humanos (RH)',
-    label: 'Recursos Humanos (RH)',
-    desc: 'Aprobación y presupuestos',
-  },
-  {
-    role: 'Participante / Empleado',
-    label: 'Participante / Empleado',
-    desc: 'Mis cursos e inscripciones',
-  },
-  {
-    role: 'Auditor / Consulta',
-    label: 'Auditor / Consulta',
-    desc: 'Visualización y reportes',
+    desc: 'Registro de participantes y captura operativa',
   },
 ];
 
@@ -72,16 +47,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [showRoleMenu, setShowRoleMenu] = useState(false);
 
-  // Determine if user has admin privileges to switch roles and see admin modules
-  const isAdmin =
-    userProfile.rol === 'Administrador de Capacitación' ||
-    userProfile.rol.toLowerCase().includes('admin') ||
+  // Check if account has Admin privileges to switch roles
+  const isAccountAdmin =
     userProfile.email.toLowerCase() === 'haroldo90@hotmail.com' ||
-    userProfile.usuario === 'haroldo90';
+    userProfile.usuario === 'haroldo90' ||
+    userProfile.rol === 'Admin' ||
+    userProfile.rol.toLowerCase().includes('admin');
 
-  const isCoordinador =
-    userProfile.rol === 'Coordinadores' ||
-    userProfile.rol === 'Coordinador de Capacitación';
+  // Currently simulated / active operating role
+  const effectiveRole: UserRole = userProfile.rol.toLowerCase().includes('admin') ? 'Admin' : 'Coordinadores';
+  const isOperatingAsAdmin = effectiveRole === 'Admin';
 
   const allNavItems = [
     {
@@ -138,7 +113,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Filter items according to role
   const navItems = allNavItems.filter((item) => {
     if (item.roles.includes('all')) return true;
-    if (item.roles.includes('admin')) return isAdmin;
+    if (item.roles.includes('admin')) return isOperatingAsAdmin;
     return true;
   });
 
@@ -166,22 +141,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center justify-between text-slate-400 font-medium tracking-wider text-[10px]">
             <span className="uppercase flex items-center gap-1">
               <Layers className="w-3 h-3 text-blue-400" />
-              {isAdmin ? 'Navegación de Roles (Admin)' : 'Rol de Acceso'}
+              {isAccountAdmin ? 'Navegación de Roles (Admin)' : 'Rol de Acceso'}
             </span>
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
           </div>
 
-          {isAdmin ? (
+          {isAccountAdmin ? (
             <div className="mt-2 space-y-1.5">
               <button
                 type="button"
                 onClick={() => setShowRoleMenu(!showRoleMenu)}
                 className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-950 border border-slate-700 hover:border-blue-500/50 text-left transition-all cursor-pointer group"
-                title="Cambiar vista de rol para navegar en el sistema"
+                title="Cambiar vista de rol para navegar en el sistema (Admin o Coordinadores)"
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-bold text-white truncate group-hover:text-blue-300 transition-colors">
-                    {userProfile.rol}
+                    {effectiveRole} {effectiveRole === 'Coordinadores' ? '(Vista Coordinador)' : '(Control Total)'}
                   </p>
                   <p className="text-[9px] text-slate-400">Clic para cambiar de rol</p>
                 </div>
@@ -195,10 +170,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {showRoleMenu && (
                 <div className="mt-2 pt-2 border-t border-slate-700/80 space-y-1 animate-in fade-in zoom-in-95 duration-150">
                   <p className="text-[10px] text-slate-400 px-1 font-semibold">
-                    Simular vista como:
+                    Seleccionar Rol Activo:
                   </p>
                   {AVAILABLE_ROLES.map((r) => {
-                    const isCurrent = userProfile.rol === r.role;
+                    const isCurrent = effectiveRole === r.role;
                     return (
                       <button
                         key={r.role}
@@ -233,8 +208,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </div>
           ) : (
-            <div className="font-semibold text-slate-200 mt-1 flex items-center justify-between">
-              <span className="truncate pr-2">{userProfile.rol}</span>
+            <div className="font-semibold text-slate-200 mt-2 flex items-center justify-between bg-slate-900/80 px-2.5 py-1.5 rounded-lg border border-slate-700">
+              <span className="truncate pr-2 font-bold text-white text-xs">Coordinadores</span>
+              <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
+                Operativo
+              </span>
             </div>
           )}
         </div>

@@ -413,9 +413,7 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 text-sm font-semibold bg-slate-50 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
               >
                 <option value="Coordinadores">Coordinadores (Registro de Participantes y Perfil)</option>
-                <option value="Administrador de Capacitación">Administrador de Capacitación (Control Total)</option>
-                <option value="Instructor / Capacitador">Instructor / Capacitador</option>
-                <option value="Recursos Humanos (RH)">Recursos Humanos (RH)</option>
+                <option value="Admin">Admin (Control Total, Edición, Borrado y Desactivación)</option>
               </select>
               <p className="text-[11px] text-slate-500 mt-0.5">
                 Al entrar al sistema, el usuario accederá con su respectivo rol y los eventos se mantendrán perfectamente sincronizados.

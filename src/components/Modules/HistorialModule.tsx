@@ -35,6 +35,11 @@ import {
   BookOpen,
   Award,
   PenTool,
+  Edit3,
+  Ban,
+  Power,
+  Save,
+  ShieldAlert,
 } from 'lucide-react';
 import { syncAllLocalEventsToSupabase, fetchEventosFromSupabase, upsertEventoToSupabase } from '../../lib/supabase';
 import { SignatureCanvas } from '../SignatureCanvas';
@@ -58,9 +63,21 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTipo, setFilterTipo] = useState<string>('todos');
   const [filterModalidad, setFilterModalidad] = useState<string>('todos');
+  const [filterEstado, setFilterEstado] = useState<'todos' | 'activos' | 'desactivados'>('todos');
   const [activeTab, setActiveTab] = useState<'todos' | 'mis_inscripciones' | 'disponibles'>('todos');
   const [selectedEvento, setSelectedEvento] = useState<EventoData | null>(null);
   const [officialSheetEvento, setOfficialSheetEvento] = useState<EventoData | null>(null);
+
+  // Admin record management states
+  const [editingEvento, setEditingEvento] = useState<EventoData | null>(null);
+  const [actionNotice, setActionNotice] = useState<{ type: 'success' | 'info'; text: string } | null>(null);
+
+  // Check if current user operating in Historial is Admin
+  const isAdmin =
+    userProfile?.rol === 'Admin' ||
+    userProfile?.rol?.toLowerCase().includes('admin') ||
+    userProfile?.email?.toLowerCase() === 'haroldo90@hotmail.com' ||
+    userProfile?.usuario === 'haroldo90';
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
@@ -182,6 +199,78 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
     upsertEventoToSupabase(updatedEvento).catch(console.error);
   };
 
+  // Toggle Activo / Desactivado (Only Admin)
+  const handleToggleActivo = async (evt: EventoData) => {
+    if (!isAdmin) return;
+    const isCurrentlyActivo = evt.activo !== false && evt.estado !== 'Desactivado';
+    const newActivo = !isCurrentlyActivo;
+    const newEstado = newActivo ? 'Registrado' : 'Desactivado';
+
+    const confirmMsg = newActivo
+      ? `¿Reactivar el registro "${evt.nombreEvento}"? Volverá a estar activo en el sistema.`
+      : `¿Desactivar el registro "${evt.nombreEvento}"? Quedará marcado como Desactivado/Inactivo.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    const updated: EventoData = {
+      ...evt,
+      activo: newActivo,
+      estado: newEstado,
+    };
+
+    onUpdateEvento(updated);
+    if (selectedEvento && selectedEvento.id === updated.id) {
+      setSelectedEvento(updated);
+    }
+
+    setActionNotice({
+      type: newActivo ? 'success' : 'info',
+      text: newActivo
+        ? `El registro "${evt.nombreEvento}" ha sido reactivado exitosamente.`
+        : `El registro "${evt.nombreEvento}" ha sido desactivado.`,
+    });
+    setTimeout(() => setActionNotice(null), 4500);
+
+    await upsertEventoToSupabase(updated).catch(console.error);
+  };
+
+  // Save changes from Edit Modal (Only Admin)
+  const handleSaveEditedEvento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEvento || !isAdmin) return;
+
+    const horasCap = Number(editingEvento.horasCapacitacion) || 0;
+    const totalPart = editingEvento.participantes?.length || 0;
+    const horasHombre = horasCap * totalPart;
+
+    const updated: EventoData = {
+      ...editingEvento,
+      horasCapacitacion: horasCap,
+      horasHombreCapacitacion: horasHombre,
+      totalParticipantes: totalPart,
+      costos: {
+        instructor: Number(editingEvento.costos?.instructor) || 0,
+        materiales: Number(editingEvento.costos?.materiales) || 0,
+        cafeteria: Number(editingEvento.costos?.cafeteria) || 0,
+        otros: Number(editingEvento.costos?.otros) || 0,
+      },
+    };
+
+    onUpdateEvento(updated);
+    if (selectedEvento && selectedEvento.id === updated.id) {
+      setSelectedEvento(updated);
+    }
+    setEditingEvento(null);
+
+    setActionNotice({
+      type: 'success',
+      text: `El registro "${updated.nombreEvento}" ha sido modificado y guardado correctamente.`,
+    });
+    setTimeout(() => setActionNotice(null), 4500);
+
+    await upsertEventoToSupabase(updated).catch(console.error);
+  };
+
   // Filtering events
   const filteredEventos = eventos.filter((evt) => {
     const matchesSearch =
@@ -199,13 +288,19 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
     const matchesModalidad =
       filterModalidad === 'todos' || evt.ubicacionModalidad === filterModalidad;
 
+    const isActivo = evt.activo !== false && evt.estado !== 'Desactivado';
+    const matchesEstado =
+      filterEstado === 'todos' ||
+      (filterEstado === 'activos' && isActivo) ||
+      (filterEstado === 'desactivados' && !isActivo);
+
     const enrolled = isUserEnrolled(evt);
     const matchesTab =
       activeTab === 'todos' ||
       (activeTab === 'mis_inscripciones' && enrolled) ||
       (activeTab === 'disponibles' && !enrolled);
 
-    return matchesSearch && matchesTipo && matchesModalidad && matchesTab;
+    return matchesSearch && matchesTipo && matchesModalidad && matchesTab && matchesEstado;
   });
 
   const misInscripcionesCount = eventos.filter((evt) => isUserEnrolled(evt)).length;
@@ -400,6 +495,16 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
               <option value="Campo">Modalidad Campo</option>
             </select>
 
+            <select
+              value={filterEstado}
+              onChange={(e) => setFilterEstado(e.target.value as 'todos' | 'activos' | 'desactivados')}
+              className="px-3 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white font-medium cursor-pointer"
+            >
+              <option value="todos">Todos los Estados</option>
+              <option value="activos">Solo Activos</option>
+              <option value="desactivados">Solo Desactivados</option>
+            </select>
+
             {/* Cloud Sync Button */}
             <button
               onClick={handleSyncToSupabase}
@@ -466,6 +571,28 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
         )}
       </div>
 
+      {/* Action Notice Alert */}
+      {actionNotice && (
+        <div
+          className={`p-4 rounded-2xl border text-xs font-semibold flex items-center justify-between shadow-sm animate-fade-in ${
+            actionNotice.type === 'success'
+              ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+              : 'bg-amber-50 text-amber-900 border-amber-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className={`w-4 h-4 ${actionNotice.type === 'success' ? 'text-emerald-600' : 'text-amber-600'}`} />
+            <span>{actionNotice.text}</span>
+          </div>
+          <button
+            onClick={() => setActionNotice(null)}
+            className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Events List / Cards */}
       <div className="space-y-4">
         {filteredEventos.length === 0 ? (
@@ -484,7 +611,11 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
               <div
                 key={evt.id}
                 className={`bg-white rounded-2xl border shadow-2xs hover:shadow-md transition-all p-6 space-y-4 ${
-                  enrolled ? 'border-emerald-300 bg-emerald-50/20' : 'border-slate-200/90 hover:border-blue-300'
+                  evt.activo === false || evt.estado === 'Desactivado'
+                    ? 'border-rose-200 bg-rose-50/20 opacity-90'
+                    : enrolled
+                    ? 'border-emerald-300 bg-emerald-50/20'
+                    : 'border-slate-200/90 hover:border-blue-300'
                 }`}
               >
                 {/* Event Header */}
@@ -500,6 +631,17 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                       <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
                         Modalidad {evt.ubicacionModalidad}
                       </span>
+
+                      {/* Estado Badge */}
+                      {evt.activo === false || evt.estado === 'Desactivado' ? (
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
+                          <Ban className="w-3 h-3 text-rose-600" /> Desactivado
+                        </span>
+                      ) : (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Activo
+                        </span>
+                      )}
 
                       {/* Enrolled Badge */}
                       {enrolled ? (
@@ -541,6 +683,7 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                       </button>
                     )}
 
+                    {/* Ver Detalle */}
                     <button
                       onClick={() => setSelectedEvento(evt)}
                       className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
@@ -548,6 +691,7 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                       <Eye className="w-3.5 h-3.5" /> Ver Detalle
                     </button>
 
+                    {/* Formato 1:1 */}
                     <button
                       onClick={() => setOfficialSheetEvento(evt)}
                       title="Ver e imprimir Hoja Oficial de Lista de Asistencia (Formato 1:1 idéntico al físico)"
@@ -557,6 +701,7 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                       <span>Formato 1:1</span>
                     </button>
 
+                    {/* Excel */}
                     <button
                       onClick={() => exportEventoToExcel(evt)}
                       title="Exportar este evento a Excel (.xlsx)"
@@ -565,6 +710,7 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                       <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Excel
                     </button>
 
+                    {/* PDF */}
                     <button
                       onClick={() => exportEventoToPdf(evt)}
                       title="Exportar este evento a PDF (.pdf)"
@@ -573,17 +719,64 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                       <FileText className="w-3.5 h-3.5 text-blue-600" /> PDF
                     </button>
 
-                    <button
-                      onClick={() => {
-                        if (confirm(`¿Eliminar de forma permanente el registro ${evt.id}?`)) {
-                          onDeleteEvento(evt.id);
-                        }
-                      }}
-                      title="Eliminar evento"
-                      className="p-2 rounded-xl border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {/* ADMIN ACTIONS: Editar, Desactivar / Reactivar, Borrar */}
+                    {isAdmin && (
+                      <>
+                        {/* Editar Registro */}
+                        <button
+                          onClick={() => setEditingEvento(JSON.parse(JSON.stringify(evt)))}
+                          title="Editar información de este registro (Solo Admin)"
+                          className="px-2.5 py-2 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Editar</span>
+                        </button>
+
+                        {/* Desactivar / Reactivar */}
+                        <button
+                          onClick={() => handleToggleActivo(evt)}
+                          title={
+                            evt.activo !== false && evt.estado !== 'Desactivado'
+                              ? 'Desactivar registro (Solo Admin)'
+                              : 'Reactivar registro (Solo Admin)'
+                          }
+                          className={`px-2.5 py-2 rounded-xl border text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
+                            evt.activo !== false && evt.estado !== 'Desactivado'
+                              ? 'border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900'
+                              : 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-900'
+                          }`}
+                        >
+                          {evt.activo !== false && evt.estado !== 'Desactivado' ? (
+                            <>
+                              <Ban className="w-3.5 h-3.5 text-amber-700" />
+                              <span>Desactivar</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Reactivar</span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* Borrar Registro (SOLO ADMIN) */}
+                        <button
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `¿Eliminar de forma permanente el registro ${evt.id} - "${evt.nombreEvento}"? Solo el rol Admin tiene autorización para borrar registros.`
+                              )
+                            ) {
+                              onDeleteEvento(evt.id);
+                            }
+                          }}
+                          title="Eliminar evento de forma permanente (Solo Admin)"
+                          className="p-2 rounded-xl border border-rose-200 bg-rose-50/70 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -822,13 +1015,64 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                 </button>
                 <button
                   onClick={() => exportEventoToPdf(selectedEvento)}
-                  className="px-3 py-1.5 rounded-lg bg-blue-900/60 hover:bg-blue-800 text-blue-200 text-xs font-medium transition-colors flex items-center gap-1.5 border border-blue-700/60"
+                  className="px-3 py-1.5 rounded-lg bg-blue-900/60 hover:bg-blue-800 text-blue-200 text-xs font-medium transition-colors flex items-center gap-1.5 border border-blue-700/60 cursor-pointer"
                 >
                   <FileText className="w-3.5 h-3.5 text-blue-400" /> PDF
                 </button>
+
+                {/* Admin Actions in Modal */}
+                {isAdmin && (
+                  <>
+                    <button
+                      onClick={() => setEditingEvento(JSON.parse(JSON.stringify(selectedEvento)))}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+                      title="Editar este registro (Solo Admin)"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" /> Editar
+                    </button>
+
+                    <button
+                      onClick={() => handleToggleActivo(selectedEvento)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer ${
+                        selectedEvento.activo !== false && selectedEvento.estado !== 'Desactivado'
+                          ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                          : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                      }`}
+                      title="Desactivar o Reactivar registro (Solo Admin)"
+                    >
+                      {selectedEvento.activo !== false && selectedEvento.estado !== 'Desactivado' ? (
+                        <>
+                          <Ban className="w-3.5 h-3.5" /> Desactivar
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Reactivar
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (
+                          confirm(
+                            `¿Eliminar de forma permanente el registro ${selectedEvento.id} - "${selectedEvento.nombreEvento}"? Solo el rol Admin tiene autorización para borrar registros.`
+                          )
+                        ) {
+                          onDeleteEvento(selectedEvento.id);
+                          setSelectedEvento(null);
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+                      title="Eliminar este evento de forma permanente (Solo Admin)"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Borrar
+                    </button>
+                  </>
+                )}
+
                 <button
                   onClick={() => setSelectedEvento(null)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -968,13 +1212,15 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                             )}
                           </td>
                           <td className="p-3 text-right">
-                            <button
-                              onClick={() => handleDeleteParticipant(p.id)}
-                              className="text-rose-500 hover:text-rose-700 p-1"
-                              title="Eliminar de la lista"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDeleteParticipant(p.id)}
+                                className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
+                                title="Eliminar participante (Solo Admin)"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -1130,6 +1376,421 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
                 Cerrar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE EDICIÓN DE EVENTO (SOLO ADMIN) */}
+      {editingEvento && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden my-auto border border-slate-200 max-h-[92vh] flex flex-col animate-fade-in">
+            {/* Modal Header */}
+            <div className="bg-slate-900 text-white p-5 flex items-center justify-between shrink-0">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-blue-400 bg-blue-950 px-2 py-0.5 rounded border border-blue-800">
+                    {editingEvento.id}
+                  </span>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    Modo Edición (Solo Admin)
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold text-white">Editar Registro de Capacitación</h3>
+              </div>
+              <button
+                onClick={() => setEditingEvento(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body Form */}
+            <form onSubmit={handleSaveEditedEvento} className="overflow-y-auto p-6 space-y-6 flex-1 text-slate-800 text-xs">
+              {/* Sección 1: Datos Generales */}
+              <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-blue-600" />
+                  <span>Datos Generales del Evento</span>
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="block font-semibold text-slate-700">Nombre del Evento / Curso *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingEvento.nombreEvento}
+                      onChange={(e) => setEditingEvento({ ...editingEvento, nombreEvento: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-semibold"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">Tipo de Evento</label>
+                    <select
+                      value={editingEvento.tipoEvento}
+                      onChange={(e) =>
+                        setEditingEvento({
+                          ...editingEvento,
+                          tipoEvento: e.target.value as 'Capacitación' | 'Reunión de Trabajo',
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium"
+                    >
+                      <option value="Capacitación">Capacitación</option>
+                      <option value="Reunión de Trabajo">Reunión de Trabajo</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">Ubicación / Modalidad</label>
+                    <select
+                      value={editingEvento.ubicacionModalidad}
+                      onChange={(e) =>
+                        setEditingEvento({
+                          ...editingEvento,
+                          ubicacionModalidad: e.target.value as 'MM' | 'OP' | 'Campo',
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium"
+                    >
+                      <option value="MM">Modalidad MM</option>
+                      <option value="OP">Modalidad OP</option>
+                      <option value="Campo">Modalidad Campo</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="block font-semibold text-slate-700">Objetivo del Evento</label>
+                    <textarea
+                      rows={2}
+                      value={editingEvento.objetivoEvento}
+                      onChange={(e) => setEditingEvento({ ...editingEvento, objetivoEvento: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 bg-white focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="block font-semibold text-slate-700">Dirigido a</label>
+                    <input
+                      type="text"
+                      value={editingEvento.dirigidoA}
+                      onChange={(e) => setEditingEvento({ ...editingEvento, dirigidoA: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección 2: Temporalidad */}
+              <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-600" />
+                  <span>Fechas, Duración y Horario</span>
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">Fecha Inicio</label>
+                    <input
+                      type="date"
+                      value={editingEvento.fechaInicio}
+                      onChange={(e) => setEditingEvento({ ...editingEvento, fechaInicio: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">Fecha Término</label>
+                    <input
+                      type="date"
+                      value={editingEvento.fechaTermino}
+                      onChange={(e) => setEditingEvento({ ...editingEvento, fechaTermino: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">No. Días</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={editingEvento.noDias}
+                      onChange={(e) => setEditingEvento({ ...editingEvento, noDias: Number(e.target.value) || 1 })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">Horario</label>
+                    <input
+                      type="text"
+                      placeholder="Ej. 09:00 a 14:00"
+                      value={editingEvento.horario}
+                      onChange={(e) => setEditingEvento({ ...editingEvento, horario: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">Horas Capacitación</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min={1}
+                      value={editingEvento.horasCapacitacion}
+                      onChange={(e) =>
+                        setEditingEvento({ ...editingEvento, horasCapacitacion: Number(e.target.value) || 0 })
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-bold text-blue-700"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección 3: Instructor */}
+              <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-blue-600" />
+                  <span>Instructor o Facilitador</span>
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">Tipo de Instructor</label>
+                    <select
+                      value={editingEvento.instructor.tipo}
+                      onChange={(e) =>
+                        setEditingEvento({
+                          ...editingEvento,
+                          instructor: {
+                            ...editingEvento.instructor,
+                            tipo: e.target.value as 'Interno' | 'Externo',
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium"
+                    >
+                      <option value="Interno">Interno</option>
+                      <option value="Externo">Externo</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="block font-semibold text-slate-700">Nombre Completo del Instructor</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingEvento.instructor.nombre}
+                      onChange={(e) =>
+                        setEditingEvento({
+                          ...editingEvento,
+                          instructor: {
+                            ...editingEvento.instructor,
+                            nombre: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-semibold"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">
+                      {editingEvento.instructor.tipo === 'Interno' ? 'Puesto' : 'Empresa Proveedora'}
+                    </label>
+                    <input
+                      type="text"
+                      value={
+                        editingEvento.instructor.tipo === 'Interno'
+                          ? editingEvento.instructor.puesto || ''
+                          : editingEvento.instructor.empresa || ''
+                      }
+                      onChange={(e) =>
+                        setEditingEvento({
+                          ...editingEvento,
+                          instructor: {
+                            ...editingEvento.instructor,
+                            [editingEvento.instructor.tipo === 'Interno' ? 'puesto' : 'empresa']: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección 4: Presupuesto y Costos */}
+              <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-emerald-600" />
+                  <span>Presupuesto y Costos ($ MXN)</span>
+                </h4>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">Honorarios Instructor</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editingEvento.costos?.instructor || 0}
+                      onChange={(e) =>
+                        setEditingEvento({
+                          ...editingEvento,
+                          costos: {
+                            ...editingEvento.costos,
+                            instructor: Number(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">Materiales y Guías</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editingEvento.costos?.materiales || 0}
+                      onChange={(e) =>
+                        setEditingEvento({
+                          ...editingEvento,
+                          costos: {
+                            ...editingEvento.costos,
+                            materiales: Number(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">Cafetería</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editingEvento.costos?.cafeteria || 0}
+                      onChange={(e) =>
+                        setEditingEvento({
+                          ...editingEvento,
+                          costos: {
+                            ...editingEvento.costos,
+                            cafeteria: Number(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">Otros Gastos</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editingEvento.costos?.otros || 0}
+                      onChange={(e) =>
+                        setEditingEvento({
+                          ...editingEvento,
+                          costos: {
+                            ...editingEvento.costos,
+                            otros: Number(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección 5: Contenido Temático & Estado */}
+              <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  <span>Contenido Temático y Estado del Registro</span>
+                </h4>
+
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700">Contenido Temático (Módulos / Temas)</label>
+                    <textarea
+                      rows={3}
+                      value={editingEvento.contenidoTematico || ''}
+                      onChange={(e) => setEditingEvento({ ...editingEvento, contenidoTematico: e.target.value })}
+                      placeholder="Módulo 1: Introducción...&#10;Módulo 2: Procedimientos..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center pt-2">
+                    <div className="space-y-1">
+                      <label className="block font-semibold text-slate-700">Estado del Evento</label>
+                      <select
+                        value={editingEvento.estado}
+                        onChange={(e) => {
+                          const val = e.target.value as any;
+                          setEditingEvento({
+                            ...editingEvento,
+                            estado: val,
+                            activo: val !== 'Desactivado',
+                          });
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-semibold"
+                      >
+                        <option value="Registrado">Registrado</option>
+                        <option value="En Proceso">En Proceso</option>
+                        <option value="Completado">Completado</option>
+                        <option value="Desactivado">Desactivado</option>
+                      </select>
+                    </div>
+
+                    <div className="pt-5 flex items-center gap-3">
+                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={editingEvento.activo !== false && editingEvento.estado !== 'Desactivado'}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setEditingEvento({
+                              ...editingEvento,
+                              activo: checked,
+                              estado: checked ? 'Registrado' : 'Desactivado',
+                            });
+                          }}
+                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="font-bold text-slate-800 text-xs">
+                          Registro Activo en el Sistema
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Buttons */}
+              <div className="pt-4 flex justify-end gap-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingEvento(null)}
+                  className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-semibold cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Guardar Cambios</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

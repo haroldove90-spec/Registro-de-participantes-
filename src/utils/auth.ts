@@ -23,7 +23,7 @@ export const DEFAULT_CREDENTIALS: UserCredential[] = [
     usuario: 'haroldo90',
     email: 'haroldo90@hotmail.com',
     clave: 'Chevropar#1970',
-    rol: 'Administrador de Capacitación',
+    rol: 'Admin',
     telefono: '+52 (55) 8912-3456',
     puesto: 'Director de Capacitación / Administrador General',
     departamento: 'Dirección de Recursos Humanos',
@@ -211,6 +211,16 @@ export function generateSecurePassword(prefix?: string): string {
 }
 
 /**
+ * Normalizes any role to either 'Admin' or 'Coordinadores' (the only 2 roles)
+ */
+export function normalizeRole(role?: string): UserRole {
+  if (!role) return 'Coordinadores';
+  const clean = role.trim().toLowerCase();
+  if (clean.includes('admin')) return 'Admin';
+  return 'Coordinadores';
+}
+
+/**
  * Authenticates user against registered credentials by username or email
  */
 export function authenticateWithCredentials(
@@ -244,16 +254,18 @@ export function authenticateWithCredentials(
     };
   }
 
+  const roleNormalized = normalizeRole(match.rol);
+
   const userProfile: UserProfile = {
     id: match.id,
     nombre: match.nombre,
     usuario: match.usuario,
     email: match.email,
-    puesto: match.puesto || (match.rol === 'Coordinadores' ? 'Coordinador de Capacitación' : 'Administrador'),
+    puesto: match.puesto || (roleNormalized === 'Coordinadores' ? 'Coordinador de Capacitación' : 'Director de Capacitación'),
     departamento: match.departamento || 'Recursos Humanos / Capacitación',
     rfc: match.rfc || 'XAXX010101000',
     telefono: match.telefono,
-    rol: match.rol,
+    rol: roleNormalized,
     avatarUrl:
       match.avatarUrl ||
       'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
@@ -416,7 +428,8 @@ CREATE TABLE IF NOT EXISTS public.eventos (
     aprobado_rh BOOLEAN NOT NULL DEFAULT false,
     
     -- Estado y Metadatos
-    estado TEXT NOT NULL DEFAULT 'Registrado' CHECK (estado IN ('Registrado', 'En Proceso', 'Completado')),
+    activo BOOLEAN NOT NULL DEFAULT true,
+    estado TEXT NOT NULL DEFAULT 'Registrado' CHECK (estado IN ('Registrado', 'En Proceso', 'Completado', 'Desactivado')),
     creado_por TEXT DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
@@ -474,17 +487,31 @@ ALTER TABLE public.participantes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.perfiles_usuario ENABLE ROW LEVEL SECURITY;
 
 -- 8. POLÍTICAS DE ACCESO COMPLETO (PERMISIVAS PARA ANON KEY)
+DROP POLICY IF EXISTS "Acceso total usuarios_sistema" ON public.usuarios_sistema;
 DROP POLICY IF EXISTS "Permitir todo en usuarios_sistema" ON public.usuarios_sistema;
-CREATE POLICY "Permitir todo en usuarios_sistema" ON public.usuarios_sistema FOR ALL USING (true);
+CREATE POLICY "Acceso total usuarios_sistema" ON public.usuarios_sistema FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Acceso total eventos" ON public.eventos;
 DROP POLICY IF EXISTS "Permitir todo en eventos" ON public.eventos;
-CREATE POLICY "Permitir todo en eventos" ON public.eventos FOR ALL USING (true);
+DROP POLICY IF EXISTS "Permitir lectura publica de eventos" ON public.eventos;
+DROP POLICY IF EXISTS "Permitir insercion publica de eventos" ON public.eventos;
+DROP POLICY IF EXISTS "Permitir actualizacion publica de eventos" ON public.eventos;
+DROP POLICY IF EXISTS "Permitir eliminacion publica de eventos" ON public.eventos;
+CREATE POLICY "Acceso total eventos" ON public.eventos FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Acceso total participantes" ON public.participantes;
 DROP POLICY IF EXISTS "Permitir todo en participantes" ON public.participantes;
-CREATE POLICY "Permitir todo en participantes" ON public.participantes FOR ALL USING (true);
+DROP POLICY IF EXISTS "Permitir lectura publica de participantes" ON public.participantes;
+DROP POLICY IF EXISTS "Permitir insercion publica de participantes" ON public.participantes;
+DROP POLICY IF EXISTS "Permitir actualizacion publica de participantes" ON public.participantes;
+DROP POLICY IF EXISTS "Permitir eliminacion publica de participantes" ON public.participantes;
+CREATE POLICY "Acceso total participantes" ON public.participantes FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Acceso total perfiles_usuario" ON public.perfiles_usuario;
 DROP POLICY IF EXISTS "Permitir todo en perfiles_usuario" ON public.perfiles_usuario;
-CREATE POLICY "Permitir todo en perfiles_usuario" ON public.perfiles_usuario FOR ALL USING (true);
+DROP POLICY IF EXISTS "Permitir lectura publica de perfiles" ON public.perfiles_usuario;
+DROP POLICY IF EXISTS "Permitir modificacion de perfiles" ON public.perfiles_usuario;
+CREATE POLICY "Acceso total perfiles_usuario" ON public.perfiles_usuario FOR ALL USING (true);
 
 -- 9. TRIGGER PARA ACTUALIZAR updated_at AUTOMÁTICAMENTE
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
@@ -513,7 +540,7 @@ INSERT INTO public.usuarios_sistema (
     'haroldo90',
     'haroldo90@hotmail.com',
     'Chevropar#1970',
-    'Administrador de Capacitación',
+    'Admin',
     '+52 (55) 8912-3456',
     'Director de Capacitación / Administrador General',
     'Dirección de Recursos Humanos',
@@ -552,7 +579,7 @@ ON CONFLICT (usuario) DO UPDATE SET
 -- Compatibilidad en perfiles_usuario
 INSERT INTO public.perfiles_usuario (id, nombre, usuario, email, puesto, departamento, rol, telefono)
 VALUES 
-    ('admin_harold', 'Harold Anguiano Morales', 'haroldo90', 'haroldo90@hotmail.com', 'Director de Capacitación', 'Recursos Humanos', 'Administrador de Capacitación', '+52 55 8912-3456'),
+    ('admin_harold', 'Harold Anguiano Morales', 'haroldo90', 'haroldo90@hotmail.com', 'Director de Capacitación', 'Recursos Humanos', 'Admin', '+52 55 8912-3456'),
     ('coord_cesar', 'Cesar Netro', 'cesar_netro', 'cesar_netro@hotmail.com', 'Coordinador de Capacitación', 'Coordinación Operativa', 'Coordinadores', '+52 81 1234-5678')
 ON CONFLICT (email) DO UPDATE SET
     nombre = EXCLUDED.nombre,

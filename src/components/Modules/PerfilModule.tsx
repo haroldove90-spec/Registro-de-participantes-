@@ -87,16 +87,17 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
   // Profile Save Success State
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Available roles for assignment
+  // Available roles for assignment (Strictly only 2 roles)
   const AVAILABLE_ROLES: UserRole[] = [
+    'Admin',
     'Coordinadores',
-    'Administrador de Capacitación',
-    'Coordinador de Capacitación',
-    'Instructor / Capacitador',
-    'Recursos Humanos (RH)',
-    'Participante / Empleado',
-    'Auditor / Consulta',
   ];
+
+  const isAccountAdmin =
+    userProfile.email.toLowerCase() === 'haroldo90@hotmail.com' ||
+    userProfile.usuario === 'haroldo90' ||
+    userProfile.rol === 'Admin' ||
+    userProfile.rol.toLowerCase().includes('admin');
 
   // Calculate Events where this user has participated
   const misEventosParticipados = eventos.filter((evt) =>
@@ -603,14 +604,24 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
                 <select
                   value={rol}
                   onChange={(e) => setRol(e.target.value as UserRole)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-semibold bg-white cursor-pointer"
+                  disabled={!isAccountAdmin}
+                  className={`w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 text-sm focus:outline-none font-semibold ${
+                    !isAccountAdmin
+                      ? 'bg-slate-100 text-slate-600 cursor-not-allowed'
+                      : 'bg-white cursor-pointer focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500'
+                  }`}
                 >
                   {AVAILABLE_ROLES.map((r) => (
                     <option key={r} value={r}>
-                      {r} {r === 'Participante / Empleado' ? '(Inscripción y consulta de cursos)' : ''}
+                      {r} {r === 'Admin' ? '(Control Total)' : '(Operativo)'}
                     </option>
                   ))}
                 </select>
+                {!isAccountAdmin && (
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Solo el rol Admin puede modificar la asignación de roles.
+                  </p>
+                )}
               </div>
             </div>
           </div>
