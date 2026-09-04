@@ -60,10 +60,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     userProfile.usuario?.toLowerCase().includes('harold') ||
     userProfile.nombre?.toLowerCase().includes('harold') ||
     userProfile.rol === 'Admin' ||
-    userProfile.rol.toLowerCase().includes('admin');
+    Boolean(userProfile.rol?.toLowerCase().includes('admin'));
 
   // Currently simulated / active operating role
-  const effectiveRole: UserRole = userProfile.rol.toLowerCase().includes('admin') ? 'Admin' : 'Supervisor';
+  const rawRole = userProfile.rol || (isAccountAdmin ? 'Admin' : 'Supervisor');
+  const effectiveRole: UserRole = rawRole.toLowerCase().includes('admin') ? 'Admin' : 'Supervisor';
   const isOperatingAsAdmin = effectiveRole === 'Admin';
 
   const allNavItems = [

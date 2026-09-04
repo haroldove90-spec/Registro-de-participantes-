@@ -73,12 +73,12 @@ export default function App() {
     const session = getStoredAuthSession();
     const current = session?.user || getStoredUserProfile();
     const isHarold =
-      current.email?.toLowerCase().includes('harold') ||
-      current.usuario?.toLowerCase().includes('harold') ||
-      current.nombre?.toLowerCase().includes('harold') ||
+      Boolean(current.email?.toLowerCase().includes('harold')) ||
+      Boolean(current.usuario?.toLowerCase().includes('harold')) ||
+      Boolean(current.nombre?.toLowerCase().includes('harold')) ||
       !current.nombre ||
-      current.nombre.toLowerCase() === 'admin' ||
-      current.nombre.toLowerCase() === 'administrador';
+      current.nombre?.toLowerCase() === 'admin' ||
+      current.nombre?.toLowerCase() === 'administrador';
 
     if (isHarold) {
       return {
@@ -86,9 +86,13 @@ export default function App() {
         nombre: 'Harold Anguiano Morales',
         usuario: current.usuario || 'haroldo90',
         email: current.email || 'haroldove90@gmail.com',
+        rol: current.rol || 'Admin',
       };
     }
-    return current;
+    return {
+      ...current,
+      rol: current.rol || 'Admin',
+    };
   });
 
   // Persist current module and selected event ID across reloads and sync with browser URL

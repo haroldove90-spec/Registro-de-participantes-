@@ -250,6 +250,15 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
       horasHombreCapacitacion: horasHombre,
       totalParticipantes: totalPart,
       costos: {
+        costoInstructor: Number(editingEvento.costos?.costoInstructor ?? editingEvento.costos?.instructor) || 0,
+        costoMateriales: Number(editingEvento.costos?.costoMateriales ?? editingEvento.costos?.materiales) || 0,
+        costoCafeteria: Number(editingEvento.costos?.costoCafeteria ?? editingEvento.costos?.cafeteria) || 0,
+        otrosCostos: Number(editingEvento.costos?.otrosCostos ?? editingEvento.costos?.otros) || 0,
+        totalCostos:
+          (Number(editingEvento.costos?.costoInstructor ?? editingEvento.costos?.instructor) || 0) +
+          (Number(editingEvento.costos?.costoMateriales ?? editingEvento.costos?.materiales) || 0) +
+          (Number(editingEvento.costos?.costoCafeteria ?? editingEvento.costos?.cafeteria) || 0) +
+          (Number(editingEvento.costos?.otrosCostos ?? editingEvento.costos?.otros) || 0),
         instructor: Number(editingEvento.costos?.instructor) || 0,
         materiales: Number(editingEvento.costos?.materiales) || 0,
         cafeteria: Number(editingEvento.costos?.cafeteria) || 0,

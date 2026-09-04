@@ -32,6 +32,10 @@ export interface Costos {
   costoCafeteria: number;
   otrosCostos: number;
   totalCostos: number; // Calculated automatically
+  instructor?: number;
+  materiales?: number;
+  cafeteria?: number;
+  otros?: number;
 }
 
 export interface EventoData {
@@ -48,6 +52,7 @@ export interface EventoData {
   horasPorDia?: number; // Horas diarias estimadas
   horarioDe: string; // e.g. "09:00"
   horarioA: string; // e.g. "17:00"
+  horario?: string; // Optional combined or display schedule
   horasCapacitacion: number;
   horasHombreCapacitacion: number; // Calculated (Horas * Total Participantes)
 

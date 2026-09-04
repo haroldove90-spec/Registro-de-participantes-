@@ -106,7 +106,7 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
     userProfile.usuario?.toLowerCase().includes('harold') ||
     userProfile.nombre?.toLowerCase().includes('harold') ||
     userProfile.rol === 'Admin' ||
-    userProfile.rol.toLowerCase().includes('admin');
+    Boolean(userProfile.rol?.toLowerCase().includes('admin'));
 
   // Calculate Events where this user has participated
   const misEventosParticipados = eventos.filter((evt) =>

@@ -42,9 +42,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     userProfile.usuario?.toLowerCase().includes('harold') ||
     userProfile.nombre?.toLowerCase().includes('harold') ||
     userProfile.rol === 'Admin' ||
-    userProfile.rol.toLowerCase().includes('admin');
+    Boolean(userProfile.rol?.toLowerCase().includes('admin'));
 
-  const effectiveRole: UserRole = userProfile.rol.toLowerCase().includes('admin') ? 'Admin' : 'Supervisor';
+  const rawRole = userProfile.rol || (isAccountAdmin ? 'Admin' : 'Supervisor');
+  const effectiveRole: UserRole = rawRole.toLowerCase().includes('admin') ? 'Admin' : 'Supervisor';
 
   const getModuleTitle = () => {
     switch (activeModule) {
@@ -92,14 +93,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     day: 'numeric',
   });
 
-  const getRoleBadgeStyle = (rol: string) => {
-    if (rol.includes('Administrador')) {
+  const getRoleBadgeStyle = (rol?: string) => {
+    const safeRol = rol || 'Admin';
+    if (safeRol.includes('Administrador') || safeRol.includes('Admin')) {
       return 'bg-purple-100 text-purple-800 border-purple-200';
     }
-    if (rol.includes('Instructor')) {
+    if (safeRol.includes('Instructor')) {
       return 'bg-emerald-100 text-emerald-800 border-emerald-200';
     }
-    if (rol.includes('Recursos Humanos')) {
+    if (safeRol.includes('Recursos Humanos')) {
       return 'bg-amber-100 text-amber-800 border-amber-200';
     }
     return 'bg-blue-100 text-blue-800 border-blue-200';
@@ -234,10 +236,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               </p>
               <span
                 className={`inline-block text-[9px] font-bold px-1.5 py-0.2 rounded border uppercase tracking-wider ${getRoleBadgeStyle(
-                  userProfile.rol
+                  userProfile?.rol
                 )}`}
               >
-                {userProfile.rol.replace(' de Capacitación', '')}
+                {(userProfile?.rol || 'Admin').replace(' de Capacitación', '')}
               </span>
             </div>
           </button>

@@ -5,6 +5,7 @@ interface SignatureCanvasProps {
   onSave: (signatureDataUrl: string) => void;
   initialSignature?: string;
   label?: string;
+  title?: string;
   readOnly?: boolean;
   height?: number;
 }
@@ -13,9 +14,11 @@ export const SignatureCanvas: React.FC<SignatureCanvasProps> = ({
   onSave,
   initialSignature,
   label = 'Captura de Firma Digital',
+  title,
   readOnly = false,
   height = 130,
 }) => {
+  const displayLabel = title || label;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
@@ -161,7 +164,7 @@ export const SignatureCanvas: React.FC<SignatureCanvasProps> = ({
       <div className="flex items-center justify-between">
         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
           <PenTool className="w-3.5 h-3.5 text-blue-600" />
-          {label}
+          {displayLabel}
         </label>
         
         <div className="flex items-center gap-2">
