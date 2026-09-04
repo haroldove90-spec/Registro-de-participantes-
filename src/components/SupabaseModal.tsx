@@ -34,6 +34,7 @@ interface SupabaseModalProps {
 
 const ROLES_LIST: UserRole[] = [
   'Administrador de Capacitación',
+  'Coordinadores',
   'Coordinador de Capacitación',
   'Instructor / Capacitador',
   'Recursos Humanos (RH)',

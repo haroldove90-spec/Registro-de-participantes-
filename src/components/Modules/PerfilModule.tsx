@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile, EventoData, UserRole } from '../../types';
+import { updateUserPassword } from '../../utils/auth';
 import {
   User,
   Mail,
@@ -88,11 +89,12 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
 
   // Available roles for assignment
   const AVAILABLE_ROLES: UserRole[] = [
-    'Participante / Empleado',
+    'Coordinadores',
     'Administrador de Capacitación',
     'Coordinador de Capacitación',
     'Instructor / Capacitador',
     'Recursos Humanos (RH)',
+    'Participante / Empleado',
     'Auditor / Consulta',
   ];
 
@@ -217,6 +219,9 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
       setPasswordError('Las nuevas contraseñas no coinciden.');
       return;
     }
+
+    // Update in auth credential store
+    updateUserPassword(userProfile.usuario || userProfile.email, newPassword);
 
     setPasswordSuccess(true);
     setCurrentPassword('');

@@ -20,10 +20,11 @@ import { RegistroModule } from './components/Modules/RegistroModule';
 import { HistorialModule } from './components/Modules/HistorialModule';
 import { MetricasModule } from './components/Modules/MetricasModule';
 import { PerfilModule } from './components/Modules/PerfilModule';
+import { CoordinadoresModule } from './components/Modules/CoordinadoresModule';
 import { LoginScreen } from './components/Auth/LoginScreen';
 
 export default function App() {
-  const [activeModule, setActiveModule] = useState<ModuleType>('metricas');
+  const [activeModule, setActiveModule] = useState<ModuleType>('registro');
   const [eventos, setEventos] = useState<EventoData[]>([]);
 
   // Session state: check if valid user session is stored in localStorage
@@ -119,7 +120,15 @@ export default function App() {
     saveStoredUserProfile(authenticatedUser);
     setUserProfile(authenticatedUser);
     setIsAuthenticated(true);
-    setActiveModule('metricas');
+    // Coordinators are directed immediately to the Participant Registration module
+    if (
+      authenticatedUser.rol === 'Coordinadores' ||
+      authenticatedUser.rol === 'Coordinador de Capacitación'
+    ) {
+      setActiveModule('registro');
+    } else {
+      setActiveModule('registro');
+    }
   };
 
   const handleLogout = async () => {
@@ -133,7 +142,7 @@ export default function App() {
     return (
       <LoginScreen
         onLoginSuccess={handleLoginSuccess}
-        initialEmail={userProfile?.email || ''}
+        initialIdentifier={userProfile?.usuario || userProfile?.email || ''}
       />
     );
   }
@@ -189,6 +198,8 @@ export default function App() {
           )}
 
           {activeModule === 'metricas' && <MetricasModule eventos={eventos} />}
+
+          {activeModule === 'coordinadores' && <CoordinadoresModule />}
 
           {activeModule === 'perfil' && (
             <PerfilModule

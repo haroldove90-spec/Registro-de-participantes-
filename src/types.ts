@@ -79,15 +79,33 @@ export interface EventoData {
 
 export type UserRole =
   | 'Administrador de Capacitación'
+  | 'Coordinadores'
   | 'Coordinador de Capacitación'
   | 'Instructor / Capacitador'
   | 'Recursos Humanos (RH)'
   | 'Participante / Empleado'
   | 'Auditor / Consulta';
 
+export interface UserCredential {
+  id: string;
+  nombre: string;
+  usuario: string; // Nombre de usuario para login (ej: haroldo90, cesar_netro)
+  email: string;
+  clave: string; // Contraseña segura
+  rol: UserRole | string;
+  telefono: string; // Número con prefijo internacional +52
+  puesto?: string;
+  departamento?: string;
+  rfc?: string;
+  avatarUrl?: string;
+  activo: boolean;
+  fechaCreacion: string;
+}
+
 export interface UserProfile {
   id?: string;
   nombre: string;
+  usuario?: string;
   email: string;
   puesto: string;
   departamento: string;
@@ -107,5 +125,5 @@ export interface AuthSession {
   lastLogin: string;
 }
 
-export type ModuleType = 'metricas' | 'registro' | 'historial' | 'perfil';
+export type ModuleType = 'metricas' | 'registro' | 'historial' | 'perfil' | 'coordinadores';
 

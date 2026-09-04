@@ -20,7 +20,8 @@ interface TopHeaderProps {
 
 const AVAILABLE_ROLES: { role: UserRole; label: string }[] = [
   { role: 'Administrador de Capacitación', label: 'Administrador' },
-  { role: 'Coordinador de Capacitación', label: 'Coordinador' },
+  { role: 'Coordinadores', label: 'Coordinadores' },
+  { role: 'Coordinador de Capacitación', label: 'Coordinador de Capacitación' },
   { role: 'Instructor / Capacitador', label: 'Instructor' },
   { role: 'Recursos Humanos (RH)', label: 'Recursos Humanos' },
   { role: 'Participante / Empleado', label: 'Participante / Empleado' },
@@ -41,13 +42,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const isAdmin =
     userProfile.rol === 'Administrador de Capacitación' ||
     userProfile.rol.toLowerCase().includes('admin') ||
-    userProfile.email.toLowerCase() === 'haroldove90@gmail.com';
+    userProfile.email.toLowerCase() === 'haroldo90@hotmail.com' ||
+    userProfile.usuario === 'haroldo90';
+
   const getModuleTitle = () => {
     switch (activeModule) {
       case 'registro':
         return {
           title: 'Registro de Participantes',
-          subtitle: 'Formulario electrónico de control de capacitaciones y listas de asistencia',
+          subtitle: 'Formulario electrónico de control de capacitaciones y listas de asistencia con firmas digitales',
         };
       case 'historial':
         return {
@@ -58,6 +61,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         return {
           title: 'Módulo de Métricas e Indicadores',
           subtitle: 'Análisis estadístico, horas-hombre, costos y distribución de capacitación',
+        };
+      case 'coordinadores':
+        return {
+          title: 'Registro de Coordinadores',
+          subtitle: 'Alta de cuentas, asignación de roles y distribución de credenciales por WhatsApp',
         };
       case 'perfil':
         return {

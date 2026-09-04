@@ -12,6 +12,7 @@ import {
   LogOut,
   ChevronDown,
   Layers,
+  Users,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -30,8 +31,13 @@ const AVAILABLE_ROLES: { role: UserRole; label: string; desc: string }[] = [
     desc: 'Acceso total y configuración',
   },
   {
+    role: 'Coordinadores',
+    label: 'Coordinadores',
+    desc: 'Registro de participantes y gestión operativa',
+  },
+  {
     role: 'Coordinador de Capacitación',
-    label: 'Coordinador',
+    label: 'Coordinador de Capacitación',
     desc: 'Registro y gestión de eventos',
   },
   {
@@ -66,30 +72,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [showRoleMenu, setShowRoleMenu] = useState(false);
 
-  // Determine if user has admin privileges to switch roles
+  // Determine if user has admin privileges to switch roles and see admin modules
   const isAdmin =
     userProfile.rol === 'Administrador de Capacitación' ||
     userProfile.rol.toLowerCase().includes('admin') ||
-    userProfile.email.toLowerCase() === 'haroldove90@gmail.com';
+    userProfile.email.toLowerCase() === 'haroldo90@hotmail.com' ||
+    userProfile.usuario === 'haroldo90';
 
-  const navItems = [
-    {
-      id: 'metricas' as ModuleType,
-      label: 'Módulo de Métricas',
-      shortLabel: 'Métricas',
-      description: 'Gráficas, KPIs e indicadores clave',
-      icon: BarChart3,
-      badge: 'KPIs',
-      badgeColor: 'bg-purple-100 text-purple-700',
-    },
+  const isCoordinador =
+    userProfile.rol === 'Coordinadores' ||
+    userProfile.rol === 'Coordinador de Capacitación';
+
+  const allNavItems = [
     {
       id: 'registro' as ModuleType,
       label: 'Registro de Participantes',
       shortLabel: 'Registro',
       description: 'Formulario de eventos y participantes',
       icon: ClipboardList,
-      badge: 'Nuevo',
+      badge: 'Principal',
       badgeColor: 'bg-blue-100 text-blue-700',
+      roles: ['all'],
     },
     {
       id: 'historial' as ModuleType,
@@ -99,16 +102,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: History,
       count: totalEventosCount,
       badgeColor: 'bg-slate-100 text-slate-700',
+      roles: ['all'],
+    },
+    {
+      id: 'metricas' as ModuleType,
+      label: 'Módulo de Métricas',
+      shortLabel: 'Métricas',
+      description: 'Gráficas, KPIs e indicadores clave',
+      icon: BarChart3,
+      badge: 'KPIs',
+      badgeColor: 'bg-purple-100 text-purple-700',
+      roles: ['admin'],
+    },
+    {
+      id: 'coordinadores' as ModuleType,
+      label: 'Registro de Coordinadores',
+      shortLabel: 'Coordinadores',
+      description: 'Gestión de cuentas y accesos por WhatsApp',
+      icon: Users,
+      badge: 'Admin',
+      badgeColor: 'bg-emerald-100 text-emerald-800',
+      roles: ['admin'],
     },
     {
       id: 'perfil' as ModuleType,
       label: 'Perfil de Usuario',
       shortLabel: 'Perfil',
-      description: 'Datos personales y configuración',
+      description: 'Foto, datos personales y clave',
       icon: User,
       badgeColor: 'bg-emerald-100 text-emerald-700',
+      roles: ['all'],
     },
   ];
+
+  // Filter items according to role
+  const navItems = allNavItems.filter((item) => {
+    if (item.roles.includes('all')) return true;
+    if (item.roles.includes('admin')) return isAdmin;
+    return true;
+  });
 
   return (
     <aside className="hidden md:flex flex-col w-72 bg-slate-900 text-slate-100 border-r border-slate-800 shrink-0 min-h-screen sticky top-0 h-screen overflow-y-auto">
