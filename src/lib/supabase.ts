@@ -256,6 +256,42 @@ function mapEventoToRow(evento: EventoData) {
  * Fetches all events with their nested participants from Supabase
  */
 export async function fetchEventosFromSupabase(): Promise<EventoData[] | null> {
+  // 1. Try server-side proxy first (bypasses browser CORS & iframe limitations)
+  try {
+    const proxyResp = await fetch('/api/supabase/fetch-eventos');
+    if (proxyResp.ok) {
+      const data = await proxyResp.json();
+      if (data.success && Array.isArray(data.eventos)) {
+        const participantsByEvent: Record<string, Participant[]> = {};
+        (data.participantes || []).forEach((p: any) => {
+          if (!participantsByEvent[p.evento_id]) {
+            participantsByEvent[p.evento_id] = [];
+          }
+          participantsByEvent[p.evento_id].push({
+            id: p.id,
+            pos: p.pos,
+            noEmp: p.no_emp || '',
+            nombre: p.nombre,
+            email: p.email || undefined,
+            genero: p.genero,
+            puesto: p.puesto || '',
+            depto: p.depto || '',
+            firma: p.firma || undefined,
+            confirmado: p.confirmado !== undefined ? p.confirmado : true,
+            fechaConfirmacion: p.fecha_confirmacion || undefined,
+          });
+        });
+
+        return data.eventos.map((row: any) =>
+          mapRowToEvento(row, participantsByEvent[row.id] || [])
+        );
+      }
+    }
+  } catch {
+    // Server proxy unavailable, fallback to direct client fetch
+  }
+
+  // 2. Direct client fallback
   try {
     const { data: eventosData, error: eventosError } = await supabase
       .from('eventos')
@@ -263,10 +299,9 @@ export async function fetchEventosFromSupabase(): Promise<EventoData[] | null> {
       .order('fecha_inicio', { ascending: false });
 
     if (eventosError) {
-      if (isTableMissingError(eventosError)) {
-        return null;
+      if (!isTableMissingError(eventosError)) {
+        console.warn('Supabase fetch eventos aviso:', eventosError.message || eventosError);
       }
-      console.warn('Supabase fetch eventos notice:', eventosError.message);
       return null;
     }
 
@@ -278,7 +313,7 @@ export async function fetchEventosFromSupabase(): Promise<EventoData[] | null> {
       .order('pos', { ascending: true });
 
     if (partError && !isTableMissingError(partError)) {
-      console.warn('Supabase fetch participantes notice:', partError.message);
+      console.warn('Supabase fetch participantes notice:', partError.message || partError);
     }
 
     const participantsByEvent: Record<string, Participant[]> = {};
@@ -306,7 +341,7 @@ export async function fetchEventosFromSupabase(): Promise<EventoData[] | null> {
     );
   } catch (err: any) {
     if (!isTableMissingError(err)) {
-      console.warn('Notice in fetchEventosFromSupabase:', err?.message || err);
+      console.warn('Aviso en fetchEventosFromSupabase (modo local activo):', err?.message || err);
     }
     return null;
   }
@@ -316,23 +351,9 @@ export async function fetchEventosFromSupabase(): Promise<EventoData[] | null> {
  * Inserts or updates an Evento and all its participants in Supabase
  */
 export async function upsertEventoToSupabase(evento: EventoData): Promise<{ success: boolean; error?: string }> {
-  try {
-    const eventoRow = mapEventoToRow(evento);
-    const { error: eventoError } = await supabase
-      .from('eventos')
-      .upsert(eventoRow, { onConflict: 'id' });
-
-    if (eventoError) {
-      console.error('Supabase upsert evento error:', eventoError);
-      return { success: false, error: eventoError.message };
-    }
-
-    // Upsert participants with consistent unique primary keys
-    if (evento.participantes && evento.participantes.length > 0) {
-      // First clean up any orphaned participants for this event
-      await supabase.from('participantes').delete().eq('evento_id', evento.id);
-
-      const partRows = evento.participantes.map((p, idx) => {
+  const eventoRow = mapEventoToRow(evento);
+  const partRows = (evento.participantes && evento.participantes.length > 0)
+    ? evento.participantes.map((p, idx) => {
         const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
         return {
           id: p.id && p.id.includes('_') ? `${p.id}_${uniqueSuffix}` : `${evento.id}_p_${p.pos || idx + 1}_${uniqueSuffix}`,
@@ -348,22 +369,59 @@ export async function upsertEventoToSupabase(evento: EventoData): Promise<{ succ
           confirmado: p.confirmado !== undefined ? p.confirmado : true,
           fecha_confirmacion: p.fechaConfirmacion || new Date().toISOString(),
         };
-      });
+      })
+    : [];
+
+  // 1. Try server-side proxy first (bypasses browser CORS & iframe limitations)
+  try {
+    const proxyResp = await fetch('/api/supabase/upsert-evento', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ eventoRow, partRows }),
+    });
+
+    if (proxyResp.ok) {
+      const data = await proxyResp.json();
+      if (data.success) {
+        return { success: true };
+      }
+    }
+  } catch {
+    // Server proxy unavailable, continue to direct client
+  }
+
+  // 2. Direct client fallback with non-blocking warning
+  try {
+    const { error: eventoError } = await supabase
+      .from('eventos')
+      .upsert(eventoRow, { onConflict: 'id' });
+
+    if (eventoError) {
+      console.warn('Supabase upsert evento aviso (datos guardados localmente):', eventoError.message || eventoError);
+      return { success: false, error: eventoError.message };
+    }
+
+    // Upsert participants with consistent unique primary keys
+    if (partRows.length > 0) {
+      // First clean up any orphaned participants for this event
+      await supabase.from('participantes').delete().eq('evento_id', evento.id);
 
       const { error: partError } = await supabase
         .from('participantes')
         .upsert(partRows, { onConflict: 'id' });
 
       if (partError) {
-        console.error('Supabase insert participantes error:', partError);
+        console.warn('Supabase insert participantes aviso:', partError.message || partError);
         return { success: false, error: partError.message };
       }
     }
 
     return { success: true };
   } catch (err: any) {
-    console.error('Exception in upsertEventoToSupabase:', err);
-    return { success: false, error: err?.message || 'Error de conexión' };
+    console.warn('Aviso en upsertEventoToSupabase (evento seguro en almacenamiento local):', err?.message || err);
+    return { success: false, error: err?.message || 'Sincronización en cola' };
   }
 }
 
@@ -395,13 +453,28 @@ export async function syncAllLocalEventsToSupabase(eventos: EventoData[]): Promi
  * Deletes an event from Supabase (cascades to participants)
  */
 export async function deleteEventoFromSupabase(id: string): Promise<boolean> {
+  // 1. Try server proxy first
+  try {
+    const proxyResp = await fetch(`/api/supabase/delete-evento/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    if (proxyResp.ok) {
+      const data = await proxyResp.json();
+      if (data.success) {
+        return true;
+      }
+    }
+  } catch {
+    // Fallback to client
+  }
+
+  // 2. Client fallback
   try {
     const { error } = await supabase.from('eventos').delete().eq('id', id);
     if (error) {
-      if (isTableMissingError(error)) {
-        return false;
+      if (!isTableMissingError(error)) {
+        console.warn('Supabase delete evento notice:', error.message);
       }
-      console.warn('Supabase delete evento notice:', error.message);
       return false;
     }
     return true;
@@ -970,7 +1043,7 @@ export async function upsertCoordinatorToSupabase(
 
     return { success: true };
   } catch (err: any) {
-    console.error('Error syncing coordinator to Supabase:', err);
+    console.warn('Notice syncing coordinator to Supabase:', err?.message || err);
     return { success: false, error: err?.message };
   }
 }
@@ -996,7 +1069,7 @@ export async function deleteCoordinatorFromSupabase(
     }
     return { success: true };
   } catch (err: any) {
-    console.error('Error deleting coordinator from Supabase:', err);
+    console.warn('Notice deleting coordinator from Supabase:', err?.message || err);
     return { success: false, error: err?.message };
   }
 }

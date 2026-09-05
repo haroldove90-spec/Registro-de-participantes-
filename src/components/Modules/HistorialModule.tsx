@@ -197,7 +197,9 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
     setTimeout(() => setEnrollSuccess(null), 5000);
 
     // Sync to cloud
-    upsertEventoToSupabase(updatedEvento).catch(console.error);
+    upsertEventoToSupabase(updatedEvento).catch((err) =>
+      console.warn('Supabase sync aviso:', err?.message || err)
+    );
   };
 
   // Toggle Activo / Desactivado (Only Admin)
@@ -232,7 +234,9 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
     });
     setTimeout(() => setActionNotice(null), 4500);
 
-    await upsertEventoToSupabase(updated).catch(console.error);
+    await upsertEventoToSupabase(updated).catch((err) =>
+      console.warn('Supabase sync aviso:', err?.message || err)
+    );
   };
 
   // Save changes from Edit Modal (Only Admin)
@@ -278,7 +282,9 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
     });
     setTimeout(() => setActionNotice(null), 4500);
 
-    await upsertEventoToSupabase(updated).catch(console.error);
+    await upsertEventoToSupabase(updated).catch((err) =>
+      console.warn('Supabase sync aviso:', err?.message || err)
+    );
   };
 
   // Filtering events
@@ -358,7 +364,9 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
     setNewPuesto('');
     setNewDepto('');
 
-    upsertEventoToSupabase(updatedEvento).catch(console.error);
+    upsertEventoToSupabase(updatedEvento).catch((err) =>
+      console.warn('Supabase sync aviso:', err?.message || err)
+    );
   };
 
   // Handle Delete Participant from selected event
@@ -385,7 +393,9 @@ export const HistorialModule: React.FC<HistorialModuleProps> = ({
 
     onUpdateEvento(updatedEvento);
     setSelectedEvento(updatedEvento);
-    upsertEventoToSupabase(updatedEvento).catch(console.error);
+    upsertEventoToSupabase(updatedEvento).catch((err) =>
+      console.warn('Supabase sync aviso:', err?.message || err)
+    );
   };
 
   const handlePrintEvent = () => {
