@@ -14,8 +14,8 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { UserProfile, UserRole } from '../../types';
-import { authenticateWithCredentials, getStoredCredentials } from '../../utils/auth';
-import { signInWithSupabase } from '../../lib/supabase';
+import { authenticateWithCredentials, getStoredCredentials, saveStoredCredentials } from '../../utils/auth';
+import { signInWithSupabase, fetchCoordinatorsFromSupabase, fetchUserProfileFromSupabase } from '../../lib/supabase';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -50,10 +50,53 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setLoading(true);
 
     try {
-      // 1. First authenticate with local credentials repository (Harold Anguiano, Cesar Netro, & new Coordinators)
+      // 0. Sync freshest credentials from Supabase before checking password if reachable
+      try {
+        const remote = await fetchCoordinatorsFromSupabase();
+        if (remote && remote.length > 0) {
+          const current = getStoredCredentials();
+          const merged = [...current];
+          remote.forEach((rc) => {
+            const idx = merged.findIndex(
+              (m) =>
+                m.usuario.toLowerCase() === rc.usuario.toLowerCase() ||
+                m.email.toLowerCase() === rc.email.toLowerCase()
+            );
+            if (idx >= 0) {
+              merged[idx] = {
+                ...merged[idx],
+                ...rc,
+                rol: rc.rol?.toLowerCase().includes('admin') ? 'Admin' : (rc.rol || merged[idx].rol),
+              };
+            } else {
+              merged.push(rc);
+            }
+          });
+          saveStoredCredentials(merged);
+        }
+      } catch (err) {
+        // Offline or warning, continue with local credentials
+      }
+
+      // 1. Authenticate with local credentials repository (Harold Anguiano, Cesar Netro, & new Coordinators)
       const localAuth = authenticateWithCredentials(cleanId, password);
       if (localAuth.success && localAuth.user) {
-        onLoginSuccess(localAuth.user);
+        let finalUser = localAuth.user;
+
+        // Check if user has updated role in Supabase cloud
+        try {
+          const remoteProfile = await fetchUserProfileFromSupabase(cleanId);
+          if (remoteProfile) {
+            finalUser = {
+              ...finalUser,
+              rol: remoteProfile.rol,
+              puesto: remoteProfile.puesto || finalUser.puesto,
+              nombre: remoteProfile.nombre || finalUser.nombre,
+            };
+          }
+        } catch {}
+
+        onLoginSuccess(finalUser);
         return;
       }
 

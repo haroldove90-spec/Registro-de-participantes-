@@ -140,6 +140,144 @@ app.delete('/api/supabase/delete-evento/:id', async (req, res) => {
   }
 });
 
+// Proxy: Fetch all system coordinators and users
+app.get('/api/supabase/fetch-coordinators', async (req, res) => {
+  try {
+    const resp = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/usuarios_sistema?select=*&order=nombre.asc`, {
+      headers: {
+        apikey: DEFAULT_SUPABASE_KEY,
+        Authorization: `Bearer ${DEFAULT_SUPABASE_KEY}`,
+      },
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      return res.status(resp.status).json({ error: errText });
+    }
+    const data = await resp.json();
+    return res.json({ success: true, data });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || 'Error al consultar usuarios' });
+  }
+});
+
+// Proxy: Upsert coordinator to both usuarios_sistema and perfiles_usuario
+app.post('/api/supabase/upsert-coordinator', async (req, res) => {
+  try {
+    const { coord } = req.body;
+    if (!coord || !coord.usuario) {
+      return res.status(400).json({ success: false, error: 'Datos de usuario incompletos' });
+    }
+
+    const targetRole = coord.rol?.toLowerCase().includes('admin') ? 'Admin' : (coord.rol || 'Supervisor');
+
+    // 1. Upsert into usuarios_sistema
+    const usuarioRow = {
+      id: coord.id,
+      nombre: coord.nombre,
+      usuario: coord.usuario,
+      email: coord.email,
+      clave: coord.clave,
+      rol: targetRole,
+      telefono: coord.telefono || '',
+      puesto: coord.puesto || 'Supervisor',
+      departamento: coord.departamento || 'Recursos Humanos / Capacitación',
+      rfc: coord.rfc || 'XAXX010101000',
+      avatar_url: coord.avatarUrl || '',
+      activo: coord.activo ?? true,
+      updated_at: new Date().toISOString(),
+    };
+
+    const respUsuario = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/usuarios_sistema`, {
+      method: 'POST',
+      headers: {
+        apikey: DEFAULT_SUPABASE_KEY,
+        Authorization: `Bearer ${DEFAULT_SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(usuarioRow),
+    });
+
+    // 2. Also keep perfiles_usuario in sync
+    const perfilRow = {
+      nombre: coord.nombre,
+      email: coord.email,
+      puesto: coord.puesto || 'Supervisor',
+      departamento: coord.departamento || 'Recursos Humanos / Capacitación',
+      rfc: coord.rfc || 'XAXX010101000',
+      telefono: coord.telefono || '',
+      rol: targetRole,
+      avatar_url: coord.avatarUrl || '',
+      notificaciones_email: true,
+      modo_oscuro: false,
+      updated_at: new Date().toISOString(),
+    };
+
+    await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/perfiles_usuario`, {
+      method: 'POST',
+      headers: {
+        apikey: DEFAULT_SUPABASE_KEY,
+        Authorization: `Bearer ${DEFAULT_SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(perfilRow),
+    });
+
+    if (!respUsuario.ok) {
+      const errText = await respUsuario.text();
+      return res.status(respUsuario.status).json({ success: false, error: errText });
+    }
+
+    return res.json({ success: true });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || 'Error al guardar usuario' });
+  }
+});
+
+// Proxy: Update user role in both usuarios_sistema and perfiles_usuario
+app.post('/api/supabase/update-user-role', async (req, res) => {
+  try {
+    const { identifier, newRole } = req.body;
+    if (!identifier || !newRole) {
+      return res.status(400).json({ success: false, error: 'Identificador y rol requeridos' });
+    }
+
+    const clean = identifier.trim().toLowerCase();
+    const targetRole = newRole.toLowerCase().includes('admin') ? 'Admin' : (newRole || 'Supervisor');
+
+    // Update in usuarios_sistema by email or usuario
+    const filterField = clean.includes('@') ? 'email' : 'usuario';
+    await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/usuarios_sistema?${filterField}=eq.${encodeURIComponent(clean)}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: DEFAULT_SUPABASE_KEY,
+        Authorization: `Bearer ${DEFAULT_SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ rol: targetRole, updated_at: new Date().toISOString() }),
+    });
+
+    // Update in perfiles_usuario
+    if (clean.includes('@')) {
+      await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/perfiles_usuario?email=eq.${encodeURIComponent(clean)}`, {
+        method: 'PATCH',
+        headers: {
+          apikey: DEFAULT_SUPABASE_KEY,
+          Authorization: `Bearer ${DEFAULT_SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ rol: targetRole, updated_at: new Date().toISOString() }),
+      });
+    }
+
+    return res.json({ success: true, role: targetRole });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || 'Error al actualizar rol' });
+  }
+});
+
 // Mount Vite middleware or static dist
 async function start() {
   if (process.env.NODE_ENV !== 'production') {

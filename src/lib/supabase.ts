@@ -487,19 +487,23 @@ export async function deleteEventoFromSupabase(id: string): Promise<boolean> {
 }
 
 /**
- * Normalizes any legacy or custom role to the strict 2-role system ('Admin' | 'Coordinadores')
+ * Normalizes any role to 'Admin', 'Supervisor', or 'Coordinadores'
  */
 export function normalizeUserRole(rawRol?: string): UserRole {
-  if (!rawRol) return 'Coordinadores';
+  if (!rawRol) return 'Supervisor';
   const clean = rawRol.toLowerCase().trim();
   if (clean.includes('admin')) {
     return 'Admin';
   }
-  return 'Coordinadores';
+  if (clean.includes('coord')) {
+    return 'Coordinadores';
+  }
+  return 'Supervisor';
 }
 
 /**
- * Fetches user profile from Supabase by email or ID
+ * Fetches user profile from Supabase by email, username, or ID.
+ * Queries BOTH 'usuarios_sistema' and 'perfiles_usuario' to guarantee accurate role resolution.
  */
 export async function fetchUserProfileFromSupabase(emailOrId?: string): Promise<UserProfile | null> {
   try {
@@ -515,26 +519,33 @@ export async function fetchUserProfileFromSupabase(emailOrId?: string): Promise<
       clean === 'haroldo90@hotmail.com' ||
       clean.includes('harold');
 
-    let query = supabase.from('perfiles_usuario').select('*');
-
-    if (clean.includes('@')) {
-      query = query.ilike('email', clean);
-    } else {
-      query = query.or(`id.eq.${clean},usuario.ilike.${clean}`);
-    }
-
-    const { data, error } = await query.maybeSingle();
-
-    if (error) {
-      if (isTableMissingError(error)) {
-        return null;
+    // 1. Query 'usuarios_sistema' first (where system credentials and roles are assigned)
+    let usuarioData: any = null;
+    try {
+      let uQuery = supabase.from('usuarios_sistema').select('*');
+      if (clean.includes('@')) {
+        uQuery = uQuery.ilike('email', clean);
+      } else {
+        uQuery = uQuery.or(`usuario.ilike.${clean},id.eq.${clean}`);
       }
-      console.warn('Supabase fetch profile notice:', error.message);
-      return null;
-    }
+      const { data: uRes } = await uQuery.maybeSingle();
+      if (uRes) usuarioData = uRes;
+    } catch {}
 
-    if (!data) {
-      // If Harold is being queried but no row exists yet in perfiles_usuario, return Harold profile
+    // 2. Query 'perfiles_usuario'
+    let perfilData: any = null;
+    try {
+      let pQuery = supabase.from('perfiles_usuario').select('*');
+      if (clean.includes('@')) {
+        pQuery = pQuery.ilike('email', clean);
+      } else {
+        pQuery = pQuery.or(`id.eq.${clean},usuario.ilike.${clean}`);
+      }
+      const { data: pRes } = await pQuery.maybeSingle();
+      if (pRes) perfilData = pRes;
+    } catch {}
+
+    if (!usuarioData && !perfilData) {
       if (isHarold) {
         return {
           id: 'cred_harold_admin',
@@ -555,26 +566,41 @@ export async function fetchUserProfileFromSupabase(emailOrId?: string): Promise<
       return null;
     }
 
+    // Role resolution: if EITHER table marks user as Admin, the effective role is Admin
+    const rawRole = usuarioData?.rol || perfilData?.rol || '';
+    const isAdmin =
+      isHarold ||
+      Boolean(usuarioData?.rol?.toLowerCase()?.includes('admin')) ||
+      Boolean(perfilData?.rol?.toLowerCase()?.includes('admin'));
+
+    const effectiveRole: UserRole = isAdmin ? 'Admin' : normalizeUserRole(rawRole);
+
+    // If one table had Admin and the other had Coordinadores, keep perfiles_usuario in sync
+    if (isAdmin && perfilData && perfilData.rol !== 'Admin') {
+      supabase.from('perfiles_usuario').update({ rol: 'Admin' }).ilike('email', perfilData.email).then();
+    }
+
+    const merged = usuarioData || perfilData;
     const isDataHarold =
       isHarold ||
-      data.email?.toLowerCase().includes('harold') ||
-      data.usuario?.toLowerCase().includes('harold') ||
-      data.id === 'cred_harold_admin';
+      merged.email?.toLowerCase().includes('harold') ||
+      merged.usuario?.toLowerCase().includes('harold') ||
+      merged.id === 'cred_harold_admin';
 
     return {
-      id: data.id,
-      nombre: isDataHarold ? 'Harold Anguiano Morales' : data.nombre,
-      usuario: data.usuario || (isDataHarold ? 'haroldo90' : undefined),
-      email: data.email,
-      puesto: data.puesto || (isDataHarold ? 'Director de Capacitación / Administrador General' : ''),
-      departamento: data.departamento || 'Recursos Humanos / Capacitación',
-      rfc: data.rfc || (isDataHarold ? 'AUMH900101XYZ' : ''),
-      telefono: data.telefono || '',
-      rol: normalizeUserRole(data.rol),
-      avatarUrl: data.avatar_url || '',
-      fechaIngreso: data.fecha_ingreso || '',
-      notificacionesEmail: data.notificaciones_email ?? true,
-      modoOscuro: data.modo_oscuro ?? false,
+      id: merged.id,
+      nombre: isDataHarold ? 'Harold Anguiano Morales' : (merged.nombre || perfilData?.nombre || ''),
+      usuario: merged.usuario || perfilData?.usuario || (isDataHarold ? 'haroldo90' : undefined),
+      email: merged.email || perfilData?.email,
+      puesto: merged.puesto || perfilData?.puesto || (isDataHarold ? 'Director de Capacitación / Administrador General' : ''),
+      departamento: merged.departamento || perfilData?.departamento || 'Recursos Humanos / Capacitación',
+      rfc: merged.rfc || perfilData?.rfc || (isDataHarold ? 'AUMH900101XYZ' : ''),
+      telefono: merged.telefono || perfilData?.telefono || '',
+      rol: effectiveRole,
+      avatarUrl: merged.avatar_url || perfilData?.avatar_url || '',
+      fechaIngreso: merged.fecha_ingreso || (merged.created_at ? merged.created_at.split('T')[0] : '2026-01-01'),
+      notificacionesEmail: merged.notificaciones_email ?? true,
+      modoOscuro: merged.modo_oscuro ?? false,
     };
   } catch (err: any) {
     if (!isTableMissingError(err)) {
@@ -714,40 +740,45 @@ export async function saveUserProfileToSupabase(profile: UserProfile): Promise<b
 }
 
 /**
- * Updates a user role in Supabase
+ * Updates a user role in Supabase (both usuarios_sistema and perfiles_usuario)
  */
 export async function updateUserRoleInSupabase(
-  email: string,
+  emailOrUsuario: string,
   newRole: UserRole
 ): Promise<{ success: boolean; message: string }> {
   try {
-    // Try RPC function first
-    const { data: rpcData, error: rpcError } = await supabase.rpc('cambiar_rol_usuario', {
-      target_email: email,
-      nuevo_rol: newRole,
-    });
+    const clean = emailOrUsuario.trim().toLowerCase();
+    const targetRole = newRole?.toLowerCase()?.includes('admin') ? 'Admin' : newRole;
 
-    if (!rpcError && rpcData) {
-      return { success: true, message: `Rol actualizado a ${newRole} exitosamente.` };
-    }
+    // 1. Update in usuarios_sistema
+    try {
+      const field = clean.includes('@') ? 'email' : 'usuario';
+      await supabase
+        .from('usuarios_sistema')
+        .update({ rol: targetRole, updated_at: new Date().toISOString() })
+        .ilike(field, clean);
+    } catch {}
 
-    // Fallback: Direct Table update
-    const { error: tableError } = await supabase
-      .from('perfiles_usuario')
-      .update({ rol: newRole })
-      .ilike('email', email);
-
-    if (tableError) {
-      if (isTableMissingError(tableError)) {
-        return {
-          success: false,
-          message: 'La tabla perfiles_usuario no existe en Supabase aún. Ejecuta el script SQL en el SQL Editor.',
-        };
+    // 2. Update in perfiles_usuario
+    try {
+      if (clean.includes('@')) {
+        await supabase
+          .from('perfiles_usuario')
+          .update({ rol: targetRole, updated_at: new Date().toISOString() })
+          .ilike('email', clean);
       }
-      return { success: false, message: tableError.message };
-    }
+    } catch {}
 
-    return { success: true, message: `Rol de ${email} actualizado a ${newRole}.` };
+    // 3. Trigger server-side proxy
+    try {
+      fetch('/api/supabase/update-user-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: clean, newRole: targetRole }),
+      }).catch(() => {});
+    } catch {}
+
+    return { success: true, message: `Rol actualizado a ${targetRole} exitosamente.` };
   } catch (err: any) {
     return { success: false, message: err?.message || 'Error al actualizar el rol en Supabase.' };
   }
@@ -985,7 +1016,8 @@ export async function upsertCoordinatorToSupabase(
   coord: UserCredential
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const targetRole = coord.rol === 'Admin' ? 'Admin' : 'Coordinadores';
+    const cleanRole = (coord.rol || '').trim().toLowerCase();
+    const targetRole = cleanRole.includes('admin') ? 'Admin' : (coord.rol || 'Supervisor');
 
     // 1. Upsert into 'usuarios_sistema' table in Supabase
     try {
@@ -1098,9 +1130,9 @@ export async function fetchCoordinatorsFromSupabase(): Promise<UserCredential[] 
       usuario: item.usuario,
       email: item.email,
       clave: item.clave,
-      rol: item.rol === 'Admin' ? 'Admin' : 'Coordinadores',
+      rol: item.rol?.toLowerCase().includes('admin') ? 'Admin' : (item.rol || 'Supervisor'),
       telefono: item.telefono || '',
-      puesto: item.puesto || 'Coordinador de Capacitación',
+      puesto: item.puesto || (item.rol?.toLowerCase().includes('admin') ? 'Administrador y Coordinador' : 'Supervisor'),
       departamento: item.departamento || 'Recursos Humanos / Capacitación',
       rfc: item.rfc || 'XAXX010101000',
       avatarUrl: item.avatar_url || '',

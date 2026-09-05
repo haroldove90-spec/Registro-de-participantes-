@@ -95,9 +95,10 @@ export const PerfilModule: React.FC<PerfilModuleProps> = ({
   // Profile Save Success State
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Available roles for assignment (Strictly only 2 roles)
+  // Available roles for assignment
   const AVAILABLE_ROLES: UserRole[] = [
     'Admin',
+    'Supervisor',
     'Coordinadores',
   ];
 

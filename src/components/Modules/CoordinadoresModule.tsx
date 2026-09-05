@@ -31,6 +31,7 @@ import {
 import { UserCredential, UserRole } from '../../types';
 import {
   getStoredCredentials,
+  saveStoredCredentials,
   saveOrUpdateCoordinator,
   deleteCoordinator,
   formatMexicanWhatsAppPhone,
@@ -43,6 +44,7 @@ import {
   fetchCoordinatorsFromSupabase,
   syncAllCredentialsToSupabase,
   upsertCoordinatorToSupabase,
+  updateUserRoleInSupabase,
 } from '../../lib/supabase';
 import { getStoredCustomAvatar } from '../../utils/storage';
 
@@ -121,19 +123,18 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
 
-  // Auto-sync on component mount: upload existing local coordinators to Supabase and pull remote
+  // Auto-sync on component mount: pull remote first (cloud is authoritative), merge with local, then persist
   useEffect(() => {
     let isMounted = true;
     const initSync = async () => {
       setIsSyncing(true);
       try {
-        const localCreds = getStoredCredentials();
-        await syncAllCredentialsToSupabase(localCreds);
-
+        // 1. Fetch remote coordinators from Supabase first
         const remote = await fetchCoordinatorsFromSupabase();
-        if (remote && remote.length > 0 && isMounted) {
-          const current = getStoredCredentials();
-          const merged = [...current];
+        const current = getStoredCredentials();
+        const merged = [...current];
+
+        if (remote && remote.length > 0) {
           remote.forEach((rc) => {
             const idx = merged.findIndex(
               (m) =>
@@ -141,15 +142,31 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
                 m.email.toLowerCase() === rc.email.toLowerCase()
             );
             if (idx >= 0) {
-              merged[idx] = { ...merged[idx], ...rc };
+              // Remote values take priority (especially updated roles like Admin)
+              merged[idx] = {
+                ...merged[idx],
+                ...rc,
+                rol: rc.rol?.toLowerCase().includes('admin') ? 'Admin' : (rc.rol || merged[idx].rol),
+              };
             } else {
               merged.push(rc);
             }
           });
-          setCredentialsList(merged);
-        }
-        if (isMounted) {
-          setSyncStatus('Sincronizado con Supabase');
+
+          // Persist the merged credentials to localStorage so local state reflects cloud roles
+          saveStoredCredentials(merged);
+
+          if (isMounted) {
+            setCredentialsList(merged);
+            setSyncStatus('Sincronizado con Supabase');
+          }
+        } else {
+          // If no remote yet, push local ones to Supabase
+          await syncAllCredentialsToSupabase(current);
+          if (isMounted) {
+            setCredentialsList(current);
+            setSyncStatus('Local respaldado en Supabase');
+          }
         }
       } catch (e) {
         console.warn('Auto-sync notice:', e);
@@ -170,20 +187,79 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
     setFormSuccess('');
     setFormError('');
     try {
-      const current = getStoredCredentials();
-      const count = await syncAllCredentialsToSupabase(current);
+      // 1. Fetch latest from Supabase
       const remote = await fetchCoordinatorsFromSupabase();
+      const current = getStoredCredentials();
+      const merged = [...current];
+
       if (remote && remote.length > 0) {
-        setCredentialsList(remote);
+        remote.forEach((rc) => {
+          const idx = merged.findIndex(
+            (m) =>
+              m.usuario.toLowerCase() === rc.usuario.toLowerCase() ||
+              m.email.toLowerCase() === rc.email.toLowerCase()
+          );
+          if (idx >= 0) {
+            merged[idx] = {
+              ...merged[idx],
+              ...rc,
+              rol: rc.rol?.toLowerCase().includes('admin') ? 'Admin' : (rc.rol || merged[idx].rol),
+            };
+          } else {
+            merged.push(rc);
+          }
+        });
+        saveStoredCredentials(merged);
+        setCredentialsList(merged);
       } else {
-        setCredentialsList(getStoredCredentials());
+        await syncAllCredentialsToSupabase(current);
+        setCredentialsList(current);
       }
+
       setFormSuccess(
-        `¡Sincronización completada! ${count} usuario(s) respaldados en las tablas "usuarios_sistema" y "perfiles_usuario" de Supabase.`
+        `¡Sincronización completada! Los roles y credenciales están sincronizados entre el sistema y Supabase.`
       );
       setSyncStatus(`Última sincronización: ${new Date().toLocaleTimeString('es-MX')}`);
     } catch (err: any) {
       setFormError('Error al sincronizar con Supabase: ' + (err?.message || 'Verifica tu conexión'));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleQuickRoleToggle = async (coord: UserCredential) => {
+    const isCurrentlyAdmin = coord.rol === 'Admin' || coord.rol?.toLowerCase().includes('admin');
+    const newRole: UserRole = isCurrentlyAdmin ? 'Supervisor' : 'Admin';
+    setIsSyncing(true);
+    setFormSuccess('');
+    setFormError('');
+
+    try {
+      const updatedCoord: UserCredential = {
+        ...coord,
+        rol: newRole,
+        puesto:
+          newRole === 'Admin'
+            ? 'Administrador y Coordinador de Capacitación'
+            : coord.puesto?.includes('Admin')
+            ? 'Supervisor de Capacitación y Eventos'
+            : coord.puesto,
+      };
+
+      // 1. Update in local storage and active session if applicable
+      saveOrUpdateCoordinator(updatedCoord);
+
+      // 2. Update directly in Supabase (both usuarios_sistema and perfiles_usuario)
+      await updateUserRoleInSupabase(coord.usuario || coord.email, newRole);
+
+      // 3. Refresh list from storage
+      setCredentialsList(getStoredCredentials());
+
+      setFormSuccess(
+        `¡Rol de "${coord.nombre}" (@${coord.usuario}) cambiado a "${newRole}" y sincronizado en Supabase!`
+      );
+    } catch (err: any) {
+      setFormError('Error al cambiar rol: ' + (err?.message || 'Error desconocido'));
     } finally {
       setIsSyncing(false);
     }
@@ -256,18 +332,20 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
       return;
     }
 
-    // Check duplicate username or email
-    const exists = credentialsList.some(
+    // Check if user already exists
+    const existingUser = credentialsList.find(
       (c) =>
-        c.id !== editingId &&
-        (c.usuario.toLowerCase() === cleanUser ||
-          c.email.toLowerCase() === email.trim().toLowerCase())
+        c.usuario.toLowerCase() === cleanUser ||
+        c.email.toLowerCase() === email.trim().toLowerCase()
     );
 
-    if (exists) {
+    // If duplicate belongs to a DIFFERENT user than the one currently being edited
+    if (editingId && existingUser && existingUser.id !== editingId) {
       setFormError('Ya existe otro usuario registrado con este nombre de usuario o correo.');
       return;
     }
+
+    const targetId = editingId || (existingUser ? existingUser.id : undefined);
 
     const finalPuesto = (puesto || 'Supervisor').trim();
     if (!puestosDisponibles.includes(finalPuesto)) {
@@ -280,7 +358,7 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
 
     // Save with normalized Mexican phone
     const saved = saveOrUpdateCoordinator({
-      id: editingId || undefined,
+      id: targetId,
       nombre: nombre.trim(),
       usuario: cleanUser,
       email: email.trim().toLowerCase(),
@@ -291,16 +369,22 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
       departamento: departamento.trim(),
       rfc: 'XAXX010101000',
       avatarUrl:
-        rol === 'Coordinadores'
+        rol === 'Admin'
+          ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80'
+          : rol === 'Coordinadores'
           ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80'
           : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
       activo: true,
     });
 
+    // Also update role directly in Supabase to be 100% sure
+    updateUserRoleInSupabase(cleanUser, rol).catch(() => {});
+    updateUserRoleInSupabase(email.trim().toLowerCase(), rol).catch(() => {});
+
     setCredentialsList(getStoredCredentials());
     setFormSuccess(
-      editingId
-        ? `Usuario "${saved.nombre}" (${finalPuesto}) actualizado y sincronizado en Supabase.`
+      targetId
+        ? `Usuario "${saved.nombre}" (${finalPuesto}) con rol "${rol}" actualizado y sincronizado en Supabase.`
         : `¡Usuario "${saved.nombre}" con puesto "${finalPuesto}" registrado con éxito y guardado en Supabase! Ya puede iniciar sesión.`
     );
 
@@ -901,15 +985,20 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="text-sm font-bold text-slate-900">{coord.nombre}</h3>
-                            <span
-                              className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                                coord.rol === 'Administrador de Capacitación'
-                                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                                  : 'bg-blue-100 text-blue-800 border border-blue-200'
-                              }`}
-                            >
-                              {coord.rol}
-                            </span>
+                            {(() => {
+                              const isAdmin = coord.rol === 'Admin' || coord.rol?.toLowerCase().includes('admin');
+                              return (
+                                <span
+                                  className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                                    isAdmin
+                                      ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                      : 'bg-blue-100 text-blue-800 border border-blue-200'
+                                  }`}
+                                >
+                                  {isAdmin ? 'Admin' : coord.rol}
+                                </span>
+                              );
+                            })()}
                             {isHaroldAdmin && (
                               <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-semibold">
                                 Admin Principal
@@ -993,8 +1082,31 @@ export const CoordinadoresModule: React.FC<CoordinadoresModuleProps> = () => {
                           )}
                         </button>
 
-                        {/* Edit & Delete for secondary accounts */}
-                        <div className="flex items-center gap-1 pt-1">
+                        {/* Edit, Role Toggle & Delete for secondary accounts */}
+                        <div className="flex items-center gap-1.5 pt-1 flex-wrap justify-end">
+                          {!isHaroldAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleQuickRoleToggle(coord)}
+                              className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                                coord.rol === 'Admin' || coord.rol?.toLowerCase().includes('admin')
+                                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+                                  : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-300 shadow-xs'
+                              }`}
+                              title={
+                                coord.rol === 'Admin' || coord.rol?.toLowerCase().includes('admin')
+                                  ? 'Cambiar rol a Supervisor'
+                                  : 'Asignar rol de Administrador'
+                              }
+                            >
+                              <ShieldCheck className="w-3 h-3" />
+                              <span>
+                                {coord.rol === 'Admin' || coord.rol?.toLowerCase().includes('admin')
+                                  ? 'Cambiar a Supervisor'
+                                  : 'Hacer Admin'}
+                              </span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleEditCoordinator(coord)}

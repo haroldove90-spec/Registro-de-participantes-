@@ -42,9 +42,9 @@ export const DEFAULT_CREDENTIALS: UserCredential[] = [
     usuario: 'cesar_netro',
     email: 'cesar_netro@hotmail.com',
     clave: 'Netro#Coord2026!',
-    rol: 'Supervisor',
+    rol: 'Admin',
     telefono: '+52 (81) 1234-5678',
-    puesto: 'Supervisor de Capacitación y Eventos',
+    puesto: 'Administrador y Coordinador de Capacitación',
     departamento: 'Coordinación Operativa y Capacitación',
     rfc: 'NECX850515ABC',
     avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
@@ -99,10 +99,16 @@ export function getStoredCredentials(): UserCredential[] {
       });
     }
 
-    const cesarExists = parsed.some((c) => c.usuario.toLowerCase() === 'cesar_netro');
-    if (!cesarExists) {
+    const cesarIndex = parsed.findIndex((c) => c.usuario.toLowerCase() === 'cesar_netro');
+    if (cesarIndex < 0) {
       parsed.push(DEFAULT_CREDENTIALS[1]);
       updated = true;
+    } else {
+      // If Cesar exists, make sure his role is Admin as set in Supabase
+      if (parsed[cesarIndex].rol !== 'Admin') {
+        parsed[cesarIndex].rol = 'Admin';
+        updated = true;
+      }
     }
 
     if (updated) {
@@ -323,39 +329,83 @@ export function saveOrUpdateCoordinator(
   const current = getStoredCredentials();
   const phoneFormatted = formatMexicanWhatsAppPhone(coordinatorData.telefono).display;
 
-  if (coordinatorData.id) {
-    const updated = current.map((c) =>
-      c.id === coordinatorData.id
-        ? {
-            ...c,
-            ...coordinatorData,
-            telefono: phoneFormatted,
-          }
-        : c
-    );
+  // Check if we are updating an existing user by ID or by username/email
+  const existingIndex = current.findIndex(
+    (c) =>
+      (coordinatorData.id && c.id === coordinatorData.id) ||
+      c.usuario.toLowerCase() === coordinatorData.usuario.trim().toLowerCase() ||
+      c.email.toLowerCase() === coordinatorData.email.trim().toLowerCase()
+  );
+
+  let saved: UserCredential;
+
+  if (existingIndex >= 0) {
+    const existing = current[existingIndex];
+    saved = {
+      ...existing,
+      ...coordinatorData,
+      id: existing.id,
+      telefono: phoneFormatted || existing.telefono,
+    };
+    const updated = [...current];
+    updated[existingIndex] = saved;
     saveStoredCredentials(updated);
-    const saved = updated.find((c) => c.id === coordinatorData.id)!;
-    upsertCoordinatorToSupabase(saved).catch((err) =>
-      console.warn('Supabase coordinator update notice:', err)
-    );
-    return saved;
+  } else {
+    // Create new
+    saved = {
+      id: coordinatorData.id || `coord_${Date.now()}`,
+      ...coordinatorData,
+      telefono: phoneFormatted,
+      activo: true,
+      fechaCreacion: new Date().toISOString().split('T')[0],
+    };
+    const updated = [saved, ...current];
+    saveStoredCredentials(updated);
   }
 
-  // Create new
-  const newCoord: UserCredential = {
-    id: `coord_${Date.now()}`,
-    ...coordinatorData,
-    telefono: phoneFormatted,
-    activo: true,
-    fechaCreacion: new Date().toISOString().split('T')[0],
-  };
+  // If the updated user is currently logged in, update active session & profile immediately
+  try {
+    const rawSession = localStorage.getItem('registro_participantes_auth_session_v1');
+    if (rawSession) {
+      const sess = JSON.parse(rawSession);
+      if (
+        sess.user &&
+        (sess.user.usuario?.toLowerCase() === saved.usuario.toLowerCase() ||
+          sess.user.email?.toLowerCase() === saved.email.toLowerCase() ||
+          sess.user.id === saved.id)
+      ) {
+        sess.user = {
+          ...sess.user,
+          nombre: saved.nombre,
+          usuario: saved.usuario,
+          email: saved.email,
+          rol: saved.rol,
+          puesto: saved.puesto || sess.user.puesto,
+          departamento: saved.departamento || sess.user.departamento,
+        };
+        localStorage.setItem('registro_participantes_auth_session_v1', JSON.stringify(sess));
+        localStorage.setItem('registro_participantes_user_profile_v1', JSON.stringify(sess.user));
+      }
+    }
+  } catch (err) {
+    console.warn('Session update notice:', err);
+  }
 
-  const updated = [newCoord, ...current];
-  saveStoredCredentials(updated);
-  upsertCoordinatorToSupabase(newCoord).catch((err) =>
-    console.warn('Supabase coordinator creation notice:', err)
+  // 1. Supabase client sync
+  upsertCoordinatorToSupabase(saved).catch((err) =>
+    console.warn('Supabase coordinator update notice:', err)
   );
-  return newCoord;
+
+  // 2. Server-side API proxy sync (guaranteed delivery)
+  try {
+    fetch('/api/supabase/upsert-coordinator', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ coord: saved }),
+    }).catch(() => {});
+  } catch {}
+
+  return saved;
 }
 
 /**

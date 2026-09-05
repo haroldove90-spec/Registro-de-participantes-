@@ -25,8 +25,10 @@ import {
   getCurrentSupabaseUser,
   saveUserProfileToSupabase,
   fetchEventosFromSupabase,
+  updateUserRoleInSupabase,
   supabase,
 } from './lib/supabase';
+import { getStoredCredentials, saveStoredCredentials } from './utils/auth';
 import { Sidebar } from './components/Navigation/Sidebar';
 import { MobileBottomNav } from './components/Navigation/MobileBottomNav';
 import { TopHeader } from './components/Navigation/TopHeader';
@@ -278,10 +280,41 @@ export default function App() {
       lastLogin: new Date().toISOString(),
     });
     setUserProfile(updatedProfile);
-    // Persist to Supabase cloud (table perfiles_usuario and auth metadata)
+
+    // Update credentials repository if this user exists there
+    try {
+      const creds = getStoredCredentials();
+      const idx = creds.findIndex(
+        (c) =>
+          c.email.toLowerCase() === updatedProfile.email.toLowerCase() ||
+          (updatedProfile.usuario && c.usuario.toLowerCase() === updatedProfile.usuario.toLowerCase()) ||
+          c.id === updatedProfile.id
+      );
+      if (idx >= 0) {
+        creds[idx] = {
+          ...creds[idx],
+          rol: updatedProfile.rol,
+          nombre: updatedProfile.nombre,
+          puesto: updatedProfile.puesto,
+          departamento: updatedProfile.departamento,
+          telefono: updatedProfile.telefono,
+        };
+        saveStoredCredentials(creds);
+      }
+    } catch {}
+
+    // Persist to Supabase cloud (both perfiles_usuario and usuarios_sistema)
     saveUserProfileToSupabase(updatedProfile).catch((err) => {
       console.warn('Error syncing profile to Supabase:', err);
     });
+
+    // Explicitly update role across both Supabase tables
+    if (updatedProfile.rol) {
+      updateUserRoleInSupabase(
+        updatedProfile.email || updatedProfile.usuario || '',
+        updatedProfile.rol as UserRole
+      ).catch(() => {});
+    }
   };
 
   // Switch role on the fly (for Admin role exploration)
